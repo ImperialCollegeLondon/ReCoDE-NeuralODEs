@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "neuralode"
+version = "0.1.0"
+description = "A ReCoDE Project Introducing Neural Ordinary Differential Equations starting from ODE theory, working through differentiable implementations of integrators, and finally incorporating neural networks into the solution."
+authors = ["Ekin Ozturk <ekin.ozturk17@imperial.ac.uk>"]
+license = "BSD 3-Clause License"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.26.4"
+matplotlib = "^3.8.4"
+einops = "^0.7.0"
+torch = "^2.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
