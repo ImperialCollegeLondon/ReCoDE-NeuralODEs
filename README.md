@@ -1,25 +1,17 @@
-<!-- Your Project title, make it sound catchy! -->
-
-# Project title
-
-<!-- Provide a short description to your project -->
+# Neural Ordinary Differential Equations
 
 ## Description
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam vitae pulvinar
-mauris. Praesent sollicitudin rutrum mauris sed congue. Donec vel orci elit.
-Phasellus luctus sodales elementum. Donec lacinia semper lorem, volutpat
-molestie arcu bibendum mollis. Nulla nec massa vitae sapien varius vulputate
-vel vitae ex. Curabitur convallis iaculis elit at faucibus. Sed eget facilisis
-orci, ut consequat neque.
-
-<!-- What should the students going through your exemplar learn -->
+This project will walk through solving Ordinary Differential Equations (ODEs) 
+within an autograd framework (PyTorch), utilising the inbuilt tools to effectively 
+differentiate the parameters and solutions of them, and finally incorporating 
+Neural Networks in order to demonstrate how to effectively learn dynamics from data.
 
 ## Learning Outcomes
 
-- Skill 1
-- Skill 2
-- Skill 3
+- Writing a python module geared towards research that can be used by others
+- How to take research/theoretical concepts and turn them into code
+- How neural networks work
 
 <!-- How long should they spend reading and practising using your Code.
 Provide your best estimate -->
