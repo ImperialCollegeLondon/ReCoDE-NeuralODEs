@@ -12,6 +12,7 @@ numpy = "^1.26.4"
 matplotlib = "^3.8.4"
 einops = "^0.7.0"
 torch = "^2.2.2"
+notebook = "^7.1.3"
 
 
 [build-system]
