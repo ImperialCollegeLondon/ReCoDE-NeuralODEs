@@ -13,6 +13,7 @@ Neural Networks in order to demonstrate how to effectively learn dynamics from d
 - How to take research/theoretical concepts and turn them into code
 - How neural networks work
 
+## ---- Fill in this part later: ----
 <!-- How long should they spend reading and practising using your Code.
 Provide your best estimate -->
 
@@ -20,6 +21,8 @@ Provide your best estimate -->
 | ---------- | ------- |
 | Reading    | 3 hours |
 | Practising | 3 hours |
+
+## --------
 
 ## Requirements
 
@@ -33,6 +36,11 @@ If there is an existing exemplar in the ReCoDE repositories link to that.
 -->
 
 ### Academic
+
+ - Knowledge of calculus, specifically in derivatives, integrals and limits.
+ - A rudimentary understanding of how floating-point/finite precision algebra works on computers.
+ - Basic python programming skills, knowledge of iteration, branching, etc.
+ - A bref understanding of vectorised computation. How CPUs/GPUs process different data in parallel
 
 <!-- List the system requirements and how to obtain them, that can be as simple
 as adding a hyperlink to as detailed as writting step-by-step instructions.
@@ -50,6 +58,10 @@ Here are some examples:
 -->
 
 ### System
+
+- Python 3.10 or newer
+- Poetry
+- CUDA-capable GPU (for GPU training of networks)
 
 <!-- Instructions on how the student should start going through the exemplar.
 
@@ -71,6 +83,11 @@ Solutions to the above can be found in `solutions`.
 
 ## Getting Started
 
+1. Start by reading Chapter 1 - Introduction on Ordinary Differential Equations (ODEs) and refer to the introductory notebooks for the implementation of the concepts.
+2. Study the jupyter notebooks on the implementations in further detail: [Fill with notebook names for introductory material]
+3. Study Chapter 2 for a walk-through of the module structure
+4. Study jupyter notebooks for training scripts as well as visualisation of results
+
 <!-- An overview of the files and folder in the exemplar.
 Not all files and directories need to be listed, just the important
 sections of your project, like the learning material, the code, the tests, etc.
@@ -87,14 +104,11 @@ in a tree node.
 
 ```log
 .
-├── examples
-│   ├── ex1
-│   └── ex2
-├── src
-|   ├── file1.py
-|   ├── file2.cpp
-|   ├── ...
-│   └── data
+├── neuralode
+│   ├── SUBMODULE 1
+│   └── SUBMODULE 2
+├── notebooks
+|   ├── FILL WITH NOTEBOOK NAMES
 ├── app
 ├── docs
 ├── main
