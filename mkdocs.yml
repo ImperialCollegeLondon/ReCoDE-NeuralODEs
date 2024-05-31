@@ -2,7 +2,7 @@ site_name: ReCoDE Neural Ordinary Differential Equations
 repo_url: https://github.com/ImperialCollegeLondon/ReCoDE-NeuralODEs
 
 ## Please change the above name and link to point to your exemplar
-## Please do not change the theme or most other options below 
+## Please do not change the theme or most other options below
 
 edit_uri: tree/main/docs/
 
