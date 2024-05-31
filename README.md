@@ -1,26 +1,19 @@
-<!-- Your Project title, make it sound catchy! -->
-
-# Project title
-
-<!-- Provide a short description to your project -->
+# Neural Ordinary Differential Equations
 
 ## Description
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam vitae pulvinar
-mauris. Praesent sollicitudin rutrum mauris sed congue. Donec vel orci elit.
-Phasellus luctus sodales elementum. Donec lacinia semper lorem, volutpat
-molestie arcu bibendum mollis. Nulla nec massa vitae sapien varius vulputate
-vel vitae ex. Curabitur convallis iaculis elit at faucibus. Sed eget facilisis
-orci, ut consequat neque.
-
-<!-- What should the students going through your exemplar learn -->
+This project will walk through solving Ordinary Differential Equations (ODEs) 
+within an autograd framework (PyTorch), utilising the inbuilt tools to effectively 
+differentiate the parameters and solutions of them, and finally incorporating 
+Neural Networks in order to demonstrate how to effectively learn dynamics from data.
 
 ## Learning Outcomes
 
-- Skill 1
-- Skill 2
-- Skill 3
+- Writing a python module geared towards research that can be used by others
+- How to take research/theoretical concepts and turn them into code
+- How neural networks work
 
+## ---- Fill in this part later: ----
 <!-- How long should they spend reading and practising using your Code.
 Provide your best estimate -->
 
@@ -28,6 +21,8 @@ Provide your best estimate -->
 | ---------- | ------- |
 | Reading    | 3 hours |
 | Practising | 3 hours |
+
+## --------
 
 ## Requirements
 
@@ -41,6 +36,11 @@ If there is an existing exemplar in the ReCoDE repositories link to that.
 -->
 
 ### Academic
+
+ - Knowledge of calculus, specifically in derivatives, integrals and limits.
+ - A rudimentary understanding of how floating-point/finite precision algebra works on computers.
+ - Basic python programming skills, knowledge of iteration, branching, etc.
+ - A bref understanding of vectorised computation. How CPUs/GPUs process different data in parallel
 
 <!-- List the system requirements and how to obtain them, that can be as simple
 as adding a hyperlink to as detailed as writting step-by-step instructions.
@@ -58,6 +58,10 @@ Here are some examples:
 -->
 
 ### System
+
+- Python 3.10 or newer
+- Poetry
+- CUDA-capable GPU (for GPU training of networks)
 
 <!-- Instructions on how the student should start going through the exemplar.
 
@@ -79,6 +83,25 @@ Solutions to the above can be found in `solutions`.
 
 ## Getting Started
 
+### Setting up Python Environment
+
+1. Install Python 3.10 or above
+2. Install `pipx` following the instructions here: https://pipx.pypa.io/stable/installation/
+3. Install Poetry using the instructions here: https://python-poetry.org/docs/#installing-with-pipx
+4. Once Poetry is set up and usable, go to the root directory of this repository and run `poetry lock` followed by `poetry install`. This should install the project dependencies into a Poetry managed virtual environment.
+5. To run the code, use:
+   1. `poetry run [SCRIPT NAME]` to run any script in the repository.
+   2. `poetry shell` to enter a shell with the appropriate `python` and dependencies set up. From there you can use `python [SCRIPT NAME]` to run any script.
+   3. `poetry run jupyter notebook` to start a jupyter notebook in the repository environment from which the notebooks can be run.
+6. If using the code as a dependency (i.e. as a module that is imported in your own script), then you'll need to run `pip install .` which will install the locally available package into the current python environment. 
+
+### How to Use this Repository
+
+1. Start by reading Chapter 1 - Introduction on Ordinary Differential Equations (ODEs) and refer to the introductory notebooks for the implementation of the concepts.
+2. Study the jupyter notebooks on the implementations in further detail: [Fill with notebook names for introductory material]
+3. Study Chapter 2 for a walk-through of the module structure
+4. Study jupyter notebooks for training scripts as well as visualisation of results
+
 <!-- An overview of the files and folder in the exemplar.
 Not all files and directories need to be listed, just the important
 sections of your project, like the learning material, the code, the tests, etc.
@@ -95,14 +118,11 @@ in a tree node.
 
 ```log
 .
-├── examples
-│   ├── ex1
-│   └── ex2
-├── src
-|   ├── file1.py
-|   ├── file2.cpp
-|   ├── ...
-│   └── data
+├── neuralode
+│   ├── SUBMODULE 1
+│   └── SUBMODULE 2
+├── notebooks
+|   ├── FILL WITH NOTEBOOK NAMES
 ├── app
 ├── docs
 ├── main
