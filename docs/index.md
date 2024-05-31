@@ -5,10 +5,11 @@ This will not be the best approach for all exemplars, so feel free to customise
 your index page as you see fit.
 -->
 
-{%
-include-markdown "../README.md"
+<!-- markdownlint-disable MD041 -->
 
-%}
+{% include-markdown "../README.md" %}
+
+<!-- markdownlint-enable MD041 -->
 
 <!-- Add more files in the `docs/` directory for them to be automatically
 included in the Mkdocs documentation -->
