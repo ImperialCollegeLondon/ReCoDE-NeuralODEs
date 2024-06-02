@@ -2,9 +2,9 @@
 
 ## Description
 
-This project will walk through solving Ordinary Differential Equations (ODEs) 
-within an autograd framework (PyTorch), utilising the inbuilt tools to effectively 
-differentiate the parameters and solutions of them, and finally incorporating 
+This project will walk through solving Ordinary Differential Equations (ODEs)
+within an autograd framework (PyTorch), utilising the inbuilt tools to effectively
+differentiate the parameters and solutions of them, and finally incorporating
 Neural Networks in order to demonstrate how to effectively learn dynamics from data.
 
 ## Learning Outcomes
@@ -37,10 +37,10 @@ If there is an existing exemplar in the ReCoDE repositories link to that.
 
 ### Academic
 
- - Knowledge of calculus, specifically in derivatives, integrals and limits.
- - A rudimentary understanding of how floating-point/finite precision algebra works on computers.
- - Basic python programming skills, knowledge of iteration, branching, etc.
- - A bref understanding of vectorised computation. How CPUs/GPUs process different data in parallel
+- Knowledge of calculus, specifically in derivatives, integrals and limits.
+- A rudimentary understanding of how floating-point/finite precision algebra works on computers.
+- Basic python programming skills, knowledge of iteration, branching, etc.
+- A bref understanding of vectorised computation. How CPUs/GPUs process different data in parallel
 
 <!-- List the system requirements and how to obtain them, that can be as simple
 as adding a hyperlink to as detailed as writting step-by-step instructions.
@@ -86,14 +86,14 @@ Solutions to the above can be found in `solutions`.
 ### Setting up Python Environment
 
 1. Install Python 3.10 or above
-2. Install `pipx` following the instructions here: https://pipx.pypa.io/stable/installation/
-3. Install Poetry using the instructions here: https://python-poetry.org/docs/#installing-with-pipx
+2. Install `pipx` following the instructions here: <https://pipx.pypa.io/stable/installation/>
+3. Install Poetry using the instructions here: <https://python-poetry.org/docs/#installing-with-pipx>
 4. Once Poetry is set up and usable, go to the root directory of this repository and run `poetry lock` followed by `poetry install`. This should install the project dependencies into a Poetry managed virtual environment.
 5. To run the code, use:
    1. `poetry run [SCRIPT NAME]` to run any script in the repository.
    2. `poetry shell` to enter a shell with the appropriate `python` and dependencies set up. From there you can use `python [SCRIPT NAME]` to run any script.
    3. `poetry run jupyter notebook` to start a jupyter notebook in the repository environment from which the notebooks can be run.
-6. If using the code as a dependency (i.e. as a module that is imported in your own script), then you'll need to run `pip install .` which will install the locally available package into the current python environment. 
+6. If using the code as a dependency (i.e. as a module that is imported in your own script), then you'll need to run `pip install .` which will install the locally available package into the current python environment.
 
 ### How to Use this Repository
 
