@@ -86,8 +86,8 @@ Solutions to the above can be found in `solutions`.
 ### Setting up Python Environment
 
 1. Install Python 3.10 or above
-2. Install `pipx` following the instructions here: [https://pipx.pypa.io/stable/installation/](https://pipx.pypa.io/stable/installation/)
-3. Install Poetry using the instructions here: [https://python-poetry.org/docs/#installing-with-pipx](https://python-poetry.org/docs/#installing-with-pipx)
+2. Install `pipx` following the instructions here: <https://pipx.pypa.io/stable/installation/>
+3. Install Poetry using the instructions here: <https://python-poetry.org/docs/#installing-with-pipx>
 4. Once Poetry is set up and usable, go to the root directory of this repository and run `poetry lock` followed by `poetry install`. This should install the project dependencies into a Poetry managed virtual environment.
 5. To run the code, use:
    1. `poetry run [SCRIPT NAME]` to run any script in the repository.
