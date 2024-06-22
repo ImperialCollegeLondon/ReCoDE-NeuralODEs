@@ -12,6 +12,7 @@ numpy = "^1.26.4"
 matplotlib = "^3.8.4"
 einops = "^0.7.0"
 torch = {version = "^2.2.2", source = "pytorch-cuda-12.1"}
+notebook = "^7.2.1"
 
 
 [[tool.poetry.source]]
