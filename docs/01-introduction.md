@@ -2,22 +2,24 @@
 # Introduction
 
 ## Overview of Project
-This ReCoDE Project on Neural Differential Equations will walk you through the theoretical basics of Ordinary Differential Equations (ODEs), specifically in the context of numerical solvers, all the way to neural ordinary differential equations. The topics we'll cover, will include answering what ODEs are, how one might go about implementing their numerical solution in research code, how to utilise an autograd equipped library to propagate gradients through a integration routine, and, most importantly, how one can then subsequently use these developed tools to tackle problems with neural networks.
-While it looks like there is a lot of ground to cover, a lot of the mathematical machinery should be familiar to you, and hopefully through this project you will learn how to structure a distributable python research module, how to take theoretical ideas like backpropagation through an integrator and apply it to neural networks and most importantly, you will have fun.
+This ReCoDE Project on Neural Differential Equations will walk you through the theoretical basics of Ordinary Differential Equations (ODEs), specifically in the context of numerical solvers, all the way to Neural Ordinary Differential Equations. The topics we'll cover will include answering what ODEs are, how to implement their numerical solution in research code, how to utilise an autograd equipped library to propagate gradients through a integration routine, and, most importantly, how one can then subsequently use these developed tools to tackle problems with Neural Networks.
+While it looks like a lot of ground to cover, a lot of the mathematical machinery should be familiar to you, and hopefully through this project you will learn how to structure a distributable python research module, how to take theoretical ideas like backpropagation through an integrator and apply it to Neural Networks and most importantly, you will have fun.
 
 ## Neural Ordinary Differential Equations
-Neural Ordinary Differential Equations combines neural networks with ordinary differential equations. In less vague terms, neural networks (NNs) model functions using a variety of nonlinear transformations, a simple feed-forward model uses affine projections combined with nonlinear transformations whereas a network that processes images may use convolutions. Broadly, NNs are a class of models where a (usually statistical) mapping between an input space and an output space can be learned. An example of this is a "Digit Classifier" that learns the mapping from images of digits (the input space) to the numeric value of the digit (the output space).
+Neural Ordinary Differential Equations combines Neural Networks with Ordinary Differential Equations (ODE). Broadly, NNs are a class of models where a (usually statistical) mapping between an input space and an output space can be learned. Differential Equations relate a function and its derivative(s), and ODEs are a subset of Differential Equations where there is only one independent variable.
+
+In less vague terms, Neural Networks (NNs) model functions using a variety of nonlinear transformations, a simple feed-forward model uses affine projections combined with nonlinear transformations whereas a network that processes images may use convolutions. An example of this is a "Digit Classifier" that learns the mapping from images of digits (the input space) to the numeric value of the digit (the output space).
 
 The input and output space could also be in relation to a sequence of some kind. For example, the input space could be a text fragement and the output space could be the distribution of probable letters that can succeed the input. Given an incomplete sentence "The dog jumps ove", a neural network could learn the mapping and predict the letter "r" as the output giving "The dog jumps over".
 
-A more dynamical example is a falling ball. A ball dropped from some height will accelerate towards the ground until impact. Perhaps what we can measure is just the height of the ball at each point in time and we drop many balls from different heights with different masses, maybe even different sizes to create a "Ball-Drop" dataset. This dataset would have some kind of input labels (the height from which the balls is dropped, the mass of the ball, the size of the ball) and output labels (the time of impact). We could train a neural network to predict the time of impact directly, but what if instead we wanted to know the exact state of the ball at any given time between the drop and the impact? We'd need a huge dataset to get a dense sampling, and we would have to hope that the neural network gives reasonable predictions for times that we don't have the data for.
+A more dynamical example is a falling ball. A ball dropped from some height will accelerate towards the ground until impact. Perhaps what we can measure is just the height of the ball at each point in time and we drop many balls from different heights with different masses, maybe even different sizes to create a "Ball-Drop" dataset. This dataset would have some input labels (the height from which the balls is dropped, the mass of the ball, the size of the ball) and output labels (the time of impact). We could train a neural network to predict the time of impact directly, but we could also ask the exact state of the ball at any given time between the drop and the impact? We'd need a huge dataset to get a dense sampling, and we would have to hope that the neural network gives reasonable predictions for times that we don't have the data for.
 
 Instead, what if we learned the dynamics itself, the mapping between the current state and some future state. We could iteratively estimate the state of the ball by first putting in the initial state, getting the next state (prescribed by the data sampling) and then re-inputting this next state back into the network until the network says the ball hit the ground. But we're still restricting to our data sampling, if we have sampled at 0.1s increments, then our network won't know how to predict at 0.05s increments because there is no data. Ideally we'd be able to sample continuously, but in this scheme each finer increment requires increasingly more data to the point where simply storing this data becomes impractical.
 
-This is where Differential Equations come in. Differential Equations (DEs) model the dynamics of some kind of system, this could be chemical, physical, etc., but ultimately the DEs we're interested in describe the time-evolution of a time-dependent dynamical system in a continuous fashion. And the goal with Neural Ordinary Differential Equations is to learn this dynamical mapping from data and perhaps even control it. We focus on ordinary differential equations specifically because they are the simplest DEs that can be dealt in a time-continuous fashion and do not have the complexity associated with other DEs such as Partial DEs, Stochastic DEs and Differential-Algebraic Equations (DEs but with algebraic constraints).
+This is where Differential Equations come in. Differential Equations (DEs) can be used to model the dynamics of some kind of system, this could be chemical, physical, etc., but ultimately the DEs we're interested in describe the time-evolution of a time-dependent dynamical system in a continuous fashion. Hence, the goal with Neural Ordinary Differential Equations is to learn this dynamical mapping from data and perhaps even control it. We will focus on Ordinary Differential Equations since they are the simplest DEs that can be dealt in a time-continuous fashion and do not have the complexity associated with other DEs such as Partial DEs, Stochastic DEs and Differential-Algebraic Equations (DEs but with algebraic constraints).
 
 
-### What are Ordinary Differential Equations? 
+### What are Ordinary Differential Equations?
 Ordinary Differential Equations are a class of differential equations where the flow is dependent on only a single independent variable[^1]. Formally, an ODE is a differential equation of the following form[^2]:
 $$\vec{F}\left(t, \vec{y},\frac{\mathrm{d}\vec{y}}{\mathrm{d}t}, \frac{\mathrm{d}^2\vec{y}}{{\mathrm{d}t}^2},\ldots,\frac{\mathrm{d}^{n-1}\vec{y}}{{\mathrm{d}t}^{n-1}},\frac{\mathrm{d}^n\vec{y}}{{\mathrm{d}t}^n}\right)=0$$ [^3]
 This expression looks somewhat daunting given the number of terms so let's simplify the notation slightly. First, let $\vec{y}^{(n)}=\frac{\mathrm{d}^n\vec{y}}{{\mathrm{d}t}^n}$ where we implicitly assume that $t$ is the independent variable. Let's also restrict our attention to explicit ODEs given that many systems commonly take this form and we'll also restrict our attention to first-order systems as higher-order explicit ODEs can be rewritten as first-order systems:
@@ -57,6 +59,8 @@ In this work, we are seeking to solve IVPs of the form
 $$\vec{y}^{(1)}=\vec{f}\left(t, \vec{y}\right),\quad\vec{y}\left(t=0\right)=\vec{h}\in\mathbb{R}^n$$
 
 ## Numerical Integration Techniques
+Numerical integration can refer to many different techniques ranging from the Trapezoid Rule (a Quadrature method) to Monte-Carlo methods to Runge-Kutta methods, but broadly, these are all methods to solve integrals of different kinds. Quadrature techniques compute definite integrals where the Boundary Conditions are defined exactly (ie. the values of the function and/or derivative on the integration boundaries are known) by subdividing the domain of integration; unlike ODEs, these integrals are not restricted to one continous dimension. Monte-Carlo methods compute multi-dimensional integrals using a probabilistic approach and solve the issues of poor scaling experienced in Quadrature methods which subdivide $d$-dimensions into $N$ parts leading to $N^d$ points of evaluation. Here we focus solely on ODEs and IVPs.
+
 Many methods exist for numerically integrating differential equations, depending on the type some tools are more suitable than others, but we will entirely restrict ourselves to IVPs. First, let's define some more notation. Let $t\in\left[t_i,t_f\right]$ be the interval of integration such that we restrict our interest to only a subset of the values of $t$[^4] where our initial values are defined as $\vec{y}\left(t=t_i\right)$.
 With this machinery setup, we can look at the most simple integration method: The (Explicit/Forward) Euler Method.
 ### The (Explicit/Forward) Euler Method
@@ -109,7 +113,11 @@ c_k & a_{k1} & a_{k2} & \ldots & a_{kk} \\
 $$
 referred to as a Butcher Tableau.
 
-### Adaptive vs Fixed-Step
+## Summary
+
+In summary, we have seen that there are methods of integrating ODEs called Explicit Runge-Kutta methods that approximate the trajectory using local estimates of the state, and we'll be implementing them using their Butcher Tableaus. The goal is to code a pipeline where, starting from data relating to a dynamical system, we can train a neural network to learn the dynamics of a system.
+
+## Appendix 1 - Adaptive vs Fixed-Step
 
 Up to this point we've discussed numerical integrators that use a fixed timestep in order to estimate a given trajectory, but let's consider a 1d function where the solution has two timescales, one long and one short such as $y(t) = y_0 e^{-\alpha t} + \frac{\alpha}{\omega}\cos{\omega t}$ where we'll assume $\alpha=1000$ and $\omega=\frac{\pi}{100}$. The ODE for this system would be $\mathrm{d}_{t} y=-\alpha y_0e^{-\alpha t} - \alpha\sin{\omega t}=\alpha\left[\alpha\cos{\omega t} + \sin{\omega t} - y(t)\right]$ We can see that the solution timescale for the exponential is $\alpha^{-1}\sim {10}^{-3}$ whereas the timescale for the oscillation is $\omega^{-1}\sim 50$. If we were to numerically integrate this using a timestep of $\Delta t>\alpha^{-1}$; when $y_0 >> 0$, we would introduce spurious oscillations in the solution as we'd overestimate the decay in value of $y_0$, if $y_0\sim 0$ then these oscillations would be too small in magnitude and the cosine/sine terms would dominate the solution, and so we would need to choose a timestep in accordance with their oscillation.  
   
@@ -138,7 +146,7 @@ We see that there are now two rows where before we had one row of $\left[b_i\rig
   
 Since the estimate is given by $\vec{y}(t+\Delta t)=\vec{y}(t) + \sum_i\left[b_i\vec{k}_i\right]$, we can see that the estimated error is given by $\vec{\epsilon}(t)=\sum_i\left(\left[(\hat{b}_i-b_i\right)\vec{k}_i\right]$ where $\left[\hat{b}_i\right]$ are the coefficients for the higher order estimate.  
 
-A detailed derivation is in the Appendix in [Derivation of Error Adaptation](#appendix-1---deriving-the-error-adaptation-equations), but suffice to say, we can change the timestep based on the error using the equation:
+A detailed derivation is in the Appendix in [Derivation of Error Adaptation](#appendix-2---deriving-the-error-adaptation-equations), but suffice to say, we can change the timestep based on the error using the equation:
 
 $$
 \Delta t_{new} = \alpha\Delta t_{old} = 0.8\left[\frac{\sigma_a + \sigma_r\Vert\vec{y}(t)\Vert_p}{\Vert\vec{\epsilon}(t)\Vert_p}\right]^{1/(p+1)}\Delta t_{old}
@@ -146,11 +154,7 @@ $$
 
 where $\sigma_a$ is the absolute error tolerance and $\sigma_r$ is the relative error tolerance.
 
-## Summary
-
-In summary, we have seen that there are methods of integrating ODEs called Explicit Runge-Kutta methods that approximate the trajectory using local estimates of the state, and we'll be implementing them using their Butcher Tableaus. The goal is to code a pipeline where, starting from data relating to a dynamical system, we can train a neural network to learn the dynamics of a system.
-
-## Appendix 1 - Deriving the Error Adaptation Equations
+## Appendix 2 - Deriving the Error Adaptation Equations
   
 The error is for each component of $\vec{y}$ with a sign that indicates over-/under-estimation relative to the higher-order estimate. Generally, we are concerned with keeping the _magnitude_ of the error small and are not particularly concerned about over-/under-estimation since, if the magnitude is sufficiently small, the sign becomes irrelevant. Noting that the timestep is a scalar quantity, we must derive a scalar measure of the error from this vector estimate. There are several ways of calculating the magnitude of a vector such as the $L^1$ norm, the $L^2$ norm and the $L^\infty$ norm. By writing these as $L^p$-norms, we can leave the choice of $p$ until later and first write down how we can adjust the timestep.  
   
