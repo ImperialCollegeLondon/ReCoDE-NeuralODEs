@@ -1,8 +1,12 @@
 [tool.poetry]
 name = "neuralode"
 version = "0.1.0"
-description = "A ReCoDE Project Introducing Neural Ordinary Differential Equations starting from ODE theory, working through differentiable implementations of integrators, and finally incorporating neural networks into the solution."
-authors = ["Ekin Ozturk <ekin.ozturk17@imperial.ac.uk>"]
+description = "A ReCoDE Project introducing Neural Ordinary Differential Equations from Ordinary Differential Equations to Neural Networks"
+authors = [
+    "Ekin Ozturk <ekin.ozturk17@imperial.ac.uk>",
+    "Jesús Urtasun Elizari <jesus.urtasun@lms.mrc.ac.uk>",
+    "James Turner <james.turner@imperial.ac.uk>",
+]
 license = "BSD 3-Clause License"
 readme = "README.md"
 
@@ -14,6 +18,15 @@ einops = "^0.7.0"
 torch = {version = "^2.2.2", source = "pytorch-cuda-12.1"}
 notebook = "^7.2.1"
 
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.5.3"
+mkdocs-include-markdown-plugin = "^3.7.1"
+mkdocs-jupyter = "^0.24.5"
+mkdocs-material = "^9.4.6"
+python-markdown-math = "^0.8"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^3.7.1"
 
 [[tool.poetry.source]]
 name = "pytorch-cuda-12.1"
