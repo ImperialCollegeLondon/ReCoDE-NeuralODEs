@@ -24,12 +24,17 @@ def exponential_fn_solution(initial_state, t, decay_constant=-1.0):
 
 
 def get_simple_harmonic_oscillator_matrix(frequency, damping):
-    return torch.stack([
-        # no x term for the derivative of x as it is equal to v
-        torch.stack([torch.zeros_like(frequency), torch.ones_like(frequency)], dim = -1),
-        # first we have the omega^2 term, then the 2*zeta*omega term
-        torch.stack([-frequency ** 2, -2 * frequency * damping], dim = -1),
-        ], dim = -2)
+    return torch.stack(
+        [
+            # no x term for the derivative of x as it is equal to v
+            torch.stack(
+                [torch.zeros_like(frequency), torch.ones_like(frequency)], dim=-1
+            ),
+            # first we have the omega^2 term, then the 2*zeta*omega term
+            torch.stack([-(frequency**2), -2 * frequency * damping], dim=-1),
+        ],
+        dim=-2,
+    )
 
 
 def simple_harmonic_oscillator(x, t, frequency, damping):
@@ -47,4 +52,4 @@ def simple_harmonic_oscillator(x, t, frequency, damping):
     #   the last of which is commensurate with the number of rows of the input matrix
     #   - Take the sum of A[...,i,j]*x[...,j] over all 'j' and the output will be indexed
     #   by 'i' in the last dimension
-    return einops.einsum(A, x, '... row col,... col->... row')
+    return einops.einsum(A, x, "... row col,... col->... row")
