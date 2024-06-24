@@ -5,22 +5,24 @@
 This project will walk through solving Ordinary Differential Equations (ODEs)
 within an autograd framework (PyTorch), utilising the inbuilt tools to effectively
 differentiate the parameters and solutions of them, and finally incorporating
-Neural Networks in order to demonstrate how to effectively learn dynamics from data.
+Neural Networks to demonstrate how to effectively learn dynamics from data.
 
 ## Learning Outcomes
 
 - Writing a python module geared towards research that can be used by others
 - How to take research/theoretical concepts and turn them into code
+- How numerical integration works
 - How neural networks work
+- How neural networks and numerical integration can be combined
 
 ## ---- Fill in this part later: ----
 <!-- How long should they spend reading and practising using your Code.
 Provide your best estimate -->
 
 | Task       | Time    |
-| ---------- | ------- |
-| Reading    | 3 hours |
-| Practising | 3 hours |
+| ---------- |---------|
+| Reading    | 4 hours |
+| Practising | 8 hours |
 
 ## --------
 
@@ -97,7 +99,7 @@ Solutions to the above can be found in `solutions`.
 
 ### How to Use this Repository
 
-1. Start by reading Chapter 1 - Introduction on Ordinary Differential Equations (ODEs) and refer to the introductory notebooks for the implementation of the concepts.
+1. Start by reading `Chapter 1 - Introduction to Ordinary Differential Equations (ODEs)` and refer to the introductory notebooks for the implementation of the concepts.
 2. Study the jupyter notebooks on the implementations in further detail: [Fill with notebook names for introductory material]
 3. Study Chapter 2 for a walk-through of the module structure
 4. Study jupyter notebooks for training scripts as well as visualisation of results
@@ -123,10 +125,8 @@ in a tree node.
 │   └── SUBMODULE 2
 ├── notebooks
 |   ├── FILL WITH NOTEBOOK NAMES
-├── app
 ├── docs
 ├── main
-└── test
 ```
 
 <!-- Change this to your License. Make sure you have added the file on GitHub -->
