@@ -1,5 +1,4 @@
 import torch
-import einops
 
 
 def exponential_fn(x, t, decay_constant=-1.0):
