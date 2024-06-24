@@ -10,13 +10,25 @@ jobs:
     steps:
       - name: Get repository
         uses: actions/checkout@v2
-      - name: Setup Python
-        uses: actions/setup-python@v2
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3.0.0
         with:
-          python-version: 3.x
+          poetry-version: 1.8.3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: poetry
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          poetry env use "3.11"
+          poetry install --only docs
+
       - name: Copy notebooks into docs
         run: cp -r notebooks/* docs/ | echo "No notebooks found"
+
       - name: Deploy Mkdocs
-        run: mkdocs gh-deploy --force
+        run: poetry run mkdocs gh-deploy --force
