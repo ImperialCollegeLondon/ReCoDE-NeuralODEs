@@ -51,6 +51,11 @@ def ensure_timestep(dt, t0, t1):
             RuntimeWarning,
         )
         dt = torch.copysign(dt, t1 - t0)
+
+    if torch.any((t0 + dt) == t0):
+        # If the timestep is too small to be measurable, then we need to adjust it accordingly
+        dt = util.next_value(t0, dt) - t0
+
     return dt
 
 
@@ -60,29 +65,41 @@ def compute_step(
     time: torch.Tensor,
     step: torch.Tensor,
     tableau: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
+    intermediate_stages: torch.Tensor = None,
+    is_adaptive: bool = False,
+):
     """Computes a single integration step given the integration scheme specified by `tableau`
 
-    :param fn: Callable for the right-hand side of the numerical integration
-    :param state: Current state of the system
-    :param time: Current time of the system
-    :param step: Step size
-    :param tableau: Butcher Tableau specifying the integration routine
-    :return: A tuple containing the change in the state and the step size taken
-    """
-    # We need to store the intermediate stages
-    k_stages = torch.stack([torch.zeros_like(time)] * (tableau.shape[1] - 1))
-    # we subtract one since the last row is the final state
-    for stage_index in range(tableau.shape[0] - 1):
-        c_coeff, *a_coeff = tableau[stage_index]
-        k_stages[stage_index] = fn(
-            # We use `compensated_sum` instead of sum in order to avoid truncation at each stage calculation
+        :param fn: Callable for the right-hand side of the numerical integration
+        :param state: Current state of the system
+        :param time: Current time of the system
+        :param step: Step size
+        :param tableau: Butcher Tableau specifying the integration routine
+        :param intermediate_stages:
+        :param is_adaptive:
+        :return: A tuple containing the change in the state and the step size taken
+        """
+    for stage_index in range(intermediate_stages.shape[0]):
+        c_coeff, a_coeff = tableau[stage_index][0], tableau[stage_index][1:]
+        intermediate_stages[stage_index] = fn(
+            # We use `compensated_sum` instead of `sum` to avoid truncation at each stage calculation
             state
-            + step * util.compensated_sum(k * a for k, a in zip(k_stages, a_coeff)),
+            + step
+            * util.compensated_sum(k * a for k, a in zip(intermediate_stages, a_coeff)),
             time + c_coeff * step,
         )
-    # We return the change in the state and the change in the time as we track partial sums
-    # Again, we use `compensated_sum` to avoid truncation in the final stage calculations
-    return step * util.compensated_sum(
-        k * b for k, b in zip(k_stages, tableau[-1, 1:])
-    ), step
+    lower_order_estimate = step * util.compensated_sum(
+        k * b for k, b in zip(intermediate_stages, tableau[-1, 1:])
+    )
+    # To have a valid value, we set `higher_order_estimate` to the same value as `lower_order_estimate`
+    # Further down, this will simplify the code as we won't have to account for invalid values
+    higher_order_estimate = lower_order_estimate
+    if is_adaptive:
+        higher_order_estimate = step * util.compensated_sum(
+            k * b for k, b in zip(intermediate_stages, tableau[-2, 1:])
+        )
+    # From a numerical perspective, this implementation is not necessarily ideal as
+    # we can lose precision when subtracting the two solutions. A more numerically accurate
+    # implementation would have one row `b_i` coefficients and another row the coefficients
+    # for computing the error directly
+    return lower_order_estimate, higher_order_estimate, step

@@ -66,3 +66,23 @@ def compensated_sum(iterable_to_sum: typing.Iterable[torch.Tensor]) -> torch.Ten
             v, (partial_sum, truncated_bits)
         )
     return partial_sum + truncated_bits  # Add truncated bits back to the sum
+
+
+def next_value(v: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
+    """
+    Returns the next smallest number in the direction of `direction`.
+
+    If `direction` is positive, then it is the smallest number larger than `v`.
+    If `direction` is negative, then it is the larger number smaller than `v`.
+
+    :param v:
+    :param direction:
+    :return: The next value
+    """
+    return (
+        v
+        + torch.copysign(
+            v.abs().log2().floor().exp2() * torch.finfo(v.dtype).eps, direction
+        )
+        + torch.finfo(v.dtype).eps
+    )
