@@ -86,3 +86,22 @@ def next_value(v: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
         )
         + torch.finfo(v.dtype).eps
     )
+
+
+def masked_grad(outputs, grad_vars, *args, **kwargs):
+    # `torch.autograd.grad` requires that only those variables for which a gradient is needed is passed in,
+    # so we first make a mask that tracks which variables need gradients and only compute the gradients for those
+    grad_vars_mask = [i.requires_grad for i in grad_vars]
+    grad_vars_needed = [grad_vars[idx] for idx, grad_needed in enumerate(grad_vars_mask) if grad_needed]
+
+    grad_results = torch.autograd.grad(outputs, tuple(grad_vars_needed), *args, **kwargs)
+
+    final_grads = [None for i in grad_vars]
+    if grad_results:
+        for idx, (grad_needed, grad_v) in enumerate(zip(grad_vars_mask, grad_vars)):
+            if grad_needed:
+                final_grads[idx] = grad_results[0]
+                grad_results = grad_results[1:]
+            else:
+                final_grads[idx] = torch.zeros_like(grad_v) if kwargs.get('materialize_grads', False) else None
+    return final_grads
