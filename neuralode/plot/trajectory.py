@@ -44,7 +44,7 @@ def plot_trajectory_with_reference(
             [i.ravel()[cidx] for i in plot_states],
             marker=".",
             markersize=4.0,
-            label=f"{method_label}:[{cidx}]",
+            label=f"{method_label}:[{cidx}]" if method_label is not None else None,
             linestyle="--",
         )
     ax.set_ylabel(r"$\vec{x}(t)$")
@@ -98,3 +98,12 @@ def plot_trajectory(
         axes=axes,
         method_label=method_label,
     )
+
+
+def plot_nbody(states):
+    fig = plt.figure(figsize = (12, 12))
+    ax = fig.add_subplot(111, projection = '3d')
+    for body_idx in range(states.shape[1]):
+        m_xyz = states[...,body_idx,:3]
+        ax.plot(*m_xyz.permute(1, 0).detach().cpu().numpy())
+    return fig, ax
