@@ -50,6 +50,13 @@ $$.
 For the other derivatives, the adjoint method is necessary as it gives a general procedure for calculating how the variation evolves over the integration. As the derivation of the adjoint method is quite involved, we will not be covering it here. It requires an understanding of not only advanced calculus such as the Leibniz Rule, but also the Calculus of Variations/Lagrange variables. For further reading, the following references should provide a starting point for understanding the adjoint method.
 
 [1] https://cs.stanford.edu/~ambrad/adjoint_tutorial.pdf
+
 [2] https://indico.flatironinstitute.org/event/101/contributions/680/attachments/126/230/adjoint_methods.pdf
+
 [3] https://www.sciencedirect.com/science/article/pii/S0377042702005289
+
 [4] https://math.mit.edu/~stevenj/18.336/adjoint.pdf
+
+[5] https://earth.esa.int/eogateway/documents/20142/3016013/EO-Summer-School-8-Brief-tutorial-on-tangent-linear-and-adjoint-models.pdf
+
+[6] https://home.cs.colorado.edu/~lizb/chaos/variational-notes.pdf
