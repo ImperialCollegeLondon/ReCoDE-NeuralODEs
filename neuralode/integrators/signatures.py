@@ -4,28 +4,25 @@ import typing
 integration_fn_signature = typing.Callable[
     [torch.Tensor, torch.Tensor, typing.Any], torch.Tensor
 ]
-forward_method_signature = typing.Callable[
+
+setup_context_signature = typing.Callable[
     [
         torch.autograd.function.FunctionCtx,
-        integration_fn_signature,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        float | torch.Tensor,
-        float | torch.Tensor,
+        typing.Any,
+        typing.Any
     ],
-    tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    None
 ]
 
-forward_method_nonadaptive_signature = typing.Callable[
+forward_method_signature = typing.Callable[
     [
-        torch.autograd.function.FunctionCtx,
         integration_fn_signature,
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
+        float | torch.Tensor,
+        float | torch.Tensor,
     ],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ]

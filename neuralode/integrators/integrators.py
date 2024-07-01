@@ -21,11 +21,9 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
     __integrator_type = classes.create_integrator_class(integrator_tableau, integrator_order,
                                                         use_local_extrapolation, integrator_name)
     
-    def __internal_forward(ctx: torch.autograd.function.FunctionCtx,
-                           forward_fn: typing.Callable[[torch.Tensor, torch.Tensor, typing.Any], torch.Tensor],
+    def __internal_forward(forward_fn: typing.Callable[[torch.Tensor, torch.Tensor, typing.Any], torch.Tensor],
                            x0: torch.Tensor, t0: torch.Tensor, t1: torch.Tensor, dt: torch.Tensor,
-                           atol: torch.Tensor, rtol: torch.Tensor, *additional_dynamic_args):
-        
+                           integrator_kwargs: dict[str, torch.Tensor], *additional_dynamic_args):
         integrator_spec = (
             __integrator_type.integrator_tableau.clone().to(x0.device, x0.dtype),
             __integrator_type.is_adaptive,
@@ -35,21 +33,22 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
             )
         
         c_state, c_time, intermediate_states, intermediate_times, error_in_state = routines.solve_ivp(
-            forward_fn, integrator_spec, x0, t0, t1, dt, atol, rtol, additional_dynamic_args
+            forward_fn, integrator_spec, x0, t0, t1, dt, integrator_kwargs, additional_dynamic_args
             )
+        
+        return c_state, c_time, intermediate_states, intermediate_times, error_in_state.detach()
+    
+    def __setup_ctx(ctx: torch.autograd.function.FunctionCtx, inputs: typing.Any, outputs: typing.Any) -> None:
+        forward_fn, x0, t0, t1, dt, integrator_kwargs, *additional_dynamic_args = inputs
+        c_state, c_time, intermediate_states, intermediate_times, error_in_state = outputs
         
         non_differentiable_parameters = [dt]
         backward_save_variables = [x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times,
                                    *additional_dynamic_args]
-        if __integrator_type.is_adaptive:
-            non_differentiable_parameters = non_differentiable_parameters + [atol, rtol]
-            backward_save_variables = [atol, rtol] + backward_save_variables
         ctx.mark_non_differentiable(*non_differentiable_parameters)
         ctx.save_for_backward(*backward_save_variables)
-        
-        ctx.__internal_forward = forward_fn
-        
-        return c_state, c_time, intermediate_states, intermediate_times, error_in_state.detach()
+        ctx.integrator_kwargs = integrator_kwargs
+        ctx.forward_fn = forward_fn
     
     def __internal_backward(ctx: torch.autograd.function.FunctionCtx,
                             d_c_state: torch.Tensor,
@@ -72,18 +71,13 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
         """
         
         # First, we retrieve our integration function that we stored in `__internal_forward`
-        forward_fn: signatures.integration_fn_signature = ctx.__internal_forward
+        forward_fn: signatures.integration_fn_signature = ctx.forward_fn
+        integrator_kwargs = ctx.integrator_kwargs
         
         # Then we retrieve the input variables
-        if __integrator_type.is_adaptive:
-            atol, rtol, x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times, *additional_dynamic_args = ctx.saved_tensors
-            tol_args = [atol, rtol]
-        else:
-            x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times, *additional_dynamic_args = ctx.saved_tensors
-            atol, rtol = torch.inf, torch.inf
-            tol_args = []
+        x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times, *additional_dynamic_args = ctx.saved_tensors
         
-        inputs = forward_fn, x0, t0, t1, dt, atol, rtol, *additional_dynamic_args
+        inputs = forward_fn, x0, t0, t1, dt, integrator_kwargs, *additional_dynamic_args
         input_grads = [None for _ in range(len(inputs))]
         
         if any(ctx.needs_input_grad):
@@ -120,7 +114,7 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
                                                                                            current_adj_state,
                                                                                            current_adj_time,
                                                                                            next_adj_time, -dt,
-                                                                                           *tol_args,
+                                                                                           integrator_kwargs,
                                                                                            *additional_dynamic_args)
                     packed_reverse_state = torch.cat([
                         torch.zeros_like(c_state.ravel()),
@@ -135,7 +129,7 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
                     current_adj_state = current_adj_state + packed_reverse_state
             
             final_adj_state, final_adj_time, _, _, _ = __integrator_type.apply(adjoint_fn, current_adj_state,
-                                                                               current_adj_time, t0, -dt, *tol_args,
+                                                                               current_adj_time, t0, -dt, integrator_kwargs,
                                                                                *additional_dynamic_args)
             
             adj_variables = final_adj_state[c_state.numel():2 * c_state.numel()].reshape(c_state.shape)
@@ -143,18 +137,18 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
             
             # The gradients of the incoming state are equal to the gradients from the first element of the
             # intermediate state plus the lagrange variables
-            input_grads[1] = adj_variables + d_intermediate_states[0].ravel().reshape(c_state.shape)
+            input_grads[1] = adj_variables.reshape(c_state.shape) + d_intermediate_states[0].ravel().reshape(c_state.shape)
             
             # The gradient of the initial time is equal to the gradient from the first element of the intermediate times
             # minus the product of the lagrange variables and the derivative of the system at the initial time
-            input_grads[2] = d_intermediate_times[0].ravel() - einops.einsum(adj_variables.ravel(), forward_fn(
+            input_grads[2] = (d_intermediate_times[0].ravel() - einops.einsum(adj_variables.ravel(), forward_fn(
                 final_adj_state[:c_state.numel()].reshape(c_state.shape), final_adj_time,
-                *additional_dynamic_args).ravel(), "i,i->")
+                *additional_dynamic_args).ravel(), "i,i->")).reshape(c_time.shape)
             # The gradient of the final time is equal to the gradient from the gradient in the final state
             # plus the product of the lagrange variables and the derivative of the system at the final time
-            input_grads[3] = (d_c_time + d_intermediate_times[-1]) + einops.einsum(
+            input_grads[3] = ((d_c_time + d_intermediate_times[-1]) + einops.einsum(
                 (d_c_state + d_intermediate_states[-1]).ravel(),
-                forward_fn(c_state, c_time, *additional_dynamic_args).ravel(), "i,i->")
+                forward_fn(c_state, c_time, *additional_dynamic_args).ravel(), "i,i->")).reshape(t0.shape)
             
             parameter_gradients = []
             
@@ -164,13 +158,44 @@ def get_integrator(integrator_tableau: torch.Tensor, integrator_order: int, use_
                                                                    num_elem:], adj_parameter_gradients[
                                                                                :num_elem].reshape(p_shape)
             
-            input_grads[7:] = parameter_gradients
-            
-            if not __integrator_type.is_adaptive:
-                input_grads = input_grads[:5] + input_grads[7:]
+            input_grads[6:] = parameter_gradients
         return tuple(input_grads)
     
-    classes.finalise_integrator_class(__integrator_type, __internal_forward, __internal_backward)
+    def __internal_vmap(info, in_dims, forward_fn: typing.Callable[[torch.Tensor, torch.Tensor, typing.Any], torch.Tensor],
+                        x0: torch.Tensor, t0: torch.Tensor, t1: torch.Tensor, dt: torch.Tensor,
+                        integrator_kwargs, *additional_dynamic_args):
+        _, x0_bdim, t0_bdim, t1_bdim, dt_bdim, _, _, *_ = in_dims
+        
+        # The strategy is: expand {x0, t0, t1} to all have the dimension
+        # being vmapped over.
+        # Then, call back into Integrator(expanded_x0, expanded_t0, expanded_t1).
+        
+        def maybe_expand_bdim_at_front(x, x_bdim):
+            if x_bdim is None:
+                return x.expand(info.batch_size, *x.shape)
+            return x.movedim(x_bdim, 0)
+        
+        # If the Tensor doesn't have the dimension being vmapped over,
+        # expand it out. Otherwise, move it to the front of the Tensor
+        x0 = maybe_expand_bdim_at_front(x0, x0_bdim)
+        t0 = maybe_expand_bdim_at_front(t0, t0_bdim)
+        t1 = maybe_expand_bdim_at_front(t1, t1_bdim)
+        
+        # The return is a tuple (output, out_dims). Since output is a Tensor,
+        # then out_dims is an Optional[int] (instead of being a Tuple).
+        res = [
+            __integrator_type.apply(forward_fn, _x0, _t0, _t1, dt, integrator_kwargs, *additional_dynamic_args)
+            for _x0, _t0, _t1 in zip(x0, t0, t1)
+            ]
+        res = [
+            torch.stack([i[0] for i in res]),
+            torch.stack([i[1] for i in res]),
+            *[[i[idx] for i in res] for idx in range(2, len(res[0]))]
+            ]
+        return tuple(res), (0, 0, None, None, None)
+    
+    classes.finalise_integrator_class(__integrator_type, __setup_ctx, __internal_forward,
+                                      __internal_backward, __internal_vmap)
     
     return __integrator_type
 

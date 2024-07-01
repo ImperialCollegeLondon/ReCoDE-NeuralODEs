@@ -78,37 +78,14 @@ def create_integrator_class(
 
 def finalise_integrator_class(
     integrator_type: typing.Type[Integrator],
+    setup_context_method: signatures.setup_context_signature,
     forward_method: signatures.forward_method_signature,
     backward_method: signatures.backward_method_signature,
+    vmap_method=None
 ) -> typing.Type[Integrator]:
-    if not integrator_type.is_adaptive:
-        # If the method isn't adaptive, neither atol nor rtol are required, but because of
-        # how `torch.autograd.Function` works, we cannot have keyword arguments
-        # For that reason, we use an alternative implementation to fill those values with a stub
-        def __internal_forward_nonadaptive(
-            ctx,
-            forward_fn: signatures.integration_fn_signature,
-            x0: torch.Tensor,
-            t0: torch.Tensor,
-            t1: torch.Tensor,
-            dt: torch.Tensor,
-            *additional_dynamic_args,
-        ) -> signatures.forward_method_nonadaptive_signature:
-            return forward_method(
-                ctx,
-                forward_fn,
-                x0,
-                t0,
-                t1,
-                dt,
-                torch.inf,
-                torch.inf,
-                *additional_dynamic_args,
-            )
-
-        integrator_type.forward = staticmethod(__internal_forward_nonadaptive)
-    else:
-        integrator_type.forward = staticmethod(forward_method)
+    integrator_type.setup_context = staticmethod(setup_context_method)
+    integrator_type.forward = staticmethod(forward_method)
     integrator_type.backward = staticmethod(backward_method)
-
+    if vmap_method is not None:
+        integrator_type.vmap = staticmethod(vmap_method)
     return integrator_type
