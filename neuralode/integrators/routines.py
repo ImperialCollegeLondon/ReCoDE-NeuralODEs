@@ -44,11 +44,7 @@ def solve_ivp(
         rtol = helpers.ensure_tolerance(integrator_kwargs.get("rtol", torch.ones_like(x0)*torch.finfo(x0.dtype).eps**0.5), x0)
         
     min_timestep = integrator_kwargs.get("min_dt", None)
-    if min_timestep is not None:
-        helpers.ensure_timestep(t0, t1, min_timestep).detach()
     max_timestep = integrator_kwargs.get("max_dt", None)
-    if max_timestep is not None:
-        helpers.ensure_timestep(t0, t1, max_timestep).detach()
 
     dt = helpers.ensure_timestep(t0, t1, dt).detach()
 
@@ -77,7 +73,7 @@ def solve_ivp(
     
     trial_restarts = 0
     
-    while torch.any(torch.where(t1 > t0, (c_time + dt) < t1, (c_time + dt) > t1)):
+    while torch.any(torch.where(t1 > t0, (c_time + dt) < t1, (c_time + dt) > t1) & (c_time != t1)):
         delta_state_lower, delta_state_upper, delta_time = helpers.compute_step(
             forward_fn,
             c_state + truncated_bits_state,
@@ -122,7 +118,7 @@ def solve_ivp(
                     dt,
                 )
                 if max_timestep is not None or min_timestep is not None:
-                    dt = torch.clamp(dt, min=min_timestep, max=max_timestep)
+                    dt = torch.copysign(torch.clamp(torch.abs(dt), min=min_timestep, max=max_timestep), dt)
                 # print(step_correction, error_in_state[-1], max_error, dt)
             redo_step = redo_step | (error_in_state[-1].detach() >= max_error.detach())
         if redo_step and trial_restarts < 8:
