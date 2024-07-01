@@ -8,6 +8,8 @@ from neuralode.integrators import signatures
 
 def ensure_tolerance(tol: torch.Tensor, x0: torch.Tensor):
     tol = torch.abs(tol)
+    eps = torch.finfo(x0.dtype).eps
+    sqrt_eps = eps ** 0.5
     if tol.dim() != 0:
         # We can set per-component tolerances, but that means that the shapes of `x0` and `tol` must be compatible.
         # To test this, we try to add `tol` to `x0`
@@ -18,25 +20,25 @@ def ensure_tolerance(tol: torch.Tensor, x0: torch.Tensor):
                 f"Expected shape of x0 and tol to be compatible, got {x0.shape} and {tol.shape} respectively"
                 )
     
-    if torch.any((tol < torch.finfo(x0.dtype).eps) & (tol != 0.0)):
+    if torch.any((tol < eps) & (tol != 0.0)):
         # If any component of `tol` is too small, we adjust the values to be compatible with the datatype
         # To preserve differentiability, we divide out the detached value of `tol` and multiply by the epsilon
         warnings.warn(
             f"Tolerance is too small for tensor dtype: {x0.dtype}. Set tol={torch.finfo(x0.dtype).eps}.",
-            RuntimeWarning,
+            UserWarning,
             )
         tol = torch.where(
-            (tol < torch.finfo(x0.dtype).eps) & (tol != 0.0),
-            (tol / tol.detach()) * torch.finfo(x0.dtype).eps,
+            (tol < eps) & (tol != 0.0),
+            (tol / tol.detach()) * eps,
             tol,
             )
-    elif torch.any(tol < torch.finfo(x0.dtype).eps ** 0.5):
+    elif torch.any((tol < sqrt_eps) & (tol != 0.0)):
         # When the tolerances are tiny (roughly eps^0.5), truncation error can start to dominate while we are
         # compensating for this using Kahan summation, the user should be informed that this may cause issues.
         warnings.warn(
             f"Tolerance is smaller than the square root of the epsilon for {x0.dtype}, this may increase "
             f"truncation error",
-            RuntimeWarning,
+            UserWarning,
             )
     return tol
 
@@ -51,7 +53,7 @@ def ensure_timestep(t0: torch.Tensor, t1: torch.Tensor, dt: torch.Tensor):
         # integration loop we either correct this or raise an error, we've elected to resolve this silently
         warnings.warn(
             f"Different sign of (t1 - t0) and dt: {t1 - t0} and {dt}, correcting...",
-            RuntimeWarning,
+            UserWarning,
             )
         dt = torch.copysign(dt, t1 - t0)
     
@@ -110,7 +112,7 @@ def construct_adjoint_fn(forward_fn: signatures.integration_fn_signature,
         # Unpack the state variables
         with torch.set_grad_enabled(True):
             packed_state = packed_state.requires_grad_(True)
-            adj_lagrange = packed_state[state_size:2 * state_size].reshape(state_shape)
+            adj_lagrange = packed_state[state_size:2 * state_size]
             dy = forward_fn(packed_state[:state_size].reshape(state_shape), adj_time, *dynamic_args).ravel()
         # We want the product of the jacobian of dy/dt wrt. each of the parameters multiplied by the adjoint variables
         # This is the Jacobian-vector product which can be directly computed through PyTorch autograd
