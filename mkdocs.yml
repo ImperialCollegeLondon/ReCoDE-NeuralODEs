@@ -46,6 +46,7 @@ plugins:
 # Set settings for markdown extensions
 markdown_extensions:
   - meta
+  - footnotes
   - mdx_math:
       enable_dollar_delimiter: True
   - pymdownx.highlight:
