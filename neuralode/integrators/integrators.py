@@ -21,7 +21,9 @@ __all__ = [
 ]
 
 
-def get_forward_method(integrator_type, use_local_extrapolation) -> signatures.forward_method_signature:
+def get_forward_method(
+    integrator_type, use_local_extrapolation
+) -> signatures.forward_method_signature:
     def __internal_forward(
         fn: typing.Callable[[torch.Tensor, torch.Tensor, typing.Any], torch.Tensor],
         x0: torch.Tensor,
@@ -92,12 +94,14 @@ def get_forward_method(integrator_type, use_local_extrapolation) -> signatures.f
 
 
 def get_backward_method(integrator_type) -> signatures.backward_method_signature:
-    def __internal_backward(ctx: torch.autograd.function.FunctionCtx,
-                            d_c_state: torch.Tensor,
-                            d_c_time: torch.Tensor,
-                            d_intermediate_states: torch.Tensor,
-                            d_intermediate_times: torch.Tensor,
-                            d_error_in_state: torch.Tensor) -> tuple[Any, ...]:
+    def __internal_backward(
+        ctx: torch.autograd.function.FunctionCtx,
+        d_c_state: torch.Tensor,
+        d_c_time: torch.Tensor,
+        d_intermediate_states: torch.Tensor,
+        d_intermediate_times: torch.Tensor,
+        d_error_in_state: torch.Tensor,
+    ) -> tuple[Any, ...]:
         """
         This function computes the gradient of the input variables for `__internal_forward` by implementing
         the adjoint method. This involves computing the adjoint state and adjoint state equation and systematically
@@ -118,7 +122,17 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
         integrator_kwargs = ctx.integrator_kwargs
 
         # Then we retrieve the input variables
-        x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times, *additional_dynamic_args = ctx.saved_tensors
+        (
+            x0,
+            t0,
+            t1,
+            dt,
+            c_state,
+            c_time,
+            intermediate_states,
+            intermediate_times,
+            *additional_dynamic_args,
+        ) = ctx.saved_tensors
 
         inputs = forward_fn, x0, t0, t1, dt, integrator_kwargs, *additional_dynamic_args
         input_grads: list[torch.Tensor | None] = [None for _ in range(len(inputs))]
@@ -130,24 +144,36 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
             # We ensure that gradients are enabled so that autograd tracks the variable operations
             # For pointwise functionals, the initial adjoint state is simply the incoming gradients
             parameter_shapes = [i.shape for i in additional_dynamic_args]
-            packed_reverse_state = torch.cat([
-                c_state.ravel(),
-                (d_c_state + d_intermediate_states[-1]).ravel(),
-            ])
+            packed_reverse_state = torch.cat(
+                [
+                    c_state.ravel(),
+                    (d_c_state + d_intermediate_states[-1]).ravel(),
+                ]
+            )
             if len(additional_dynamic_args) > 0:
-                packed_reverse_state = torch.cat([
-                    packed_reverse_state,
-                    torch.zeros(sum(map(math.prod, parameter_shapes)), device = c_state.device, dtype = c_state.dtype)
-                ])
+                packed_reverse_state = torch.cat(
+                    [
+                        packed_reverse_state,
+                        torch.zeros(
+                            sum(map(math.prod, parameter_shapes)),
+                            device=c_state.device,
+                            dtype=c_state.dtype,
+                        ),
+                    ]
+                )
 
             current_adj_time = t1
             current_adj_state = packed_reverse_state
 
             if torch.any(d_intermediate_states != 0.0):
-                adj_indices = torch.arange(c_state.numel(), 2*c_state.numel(), device=c_state.device)
+                adj_indices = torch.arange(
+                    c_state.numel(), 2 * c_state.numel(), device=c_state.device
+                )
                 # We only need to account for the incoming gradients if any are non-zero
-                for next_adj_time, d_inter_state in zip(intermediate_times[1:-1].flip(dims = [0]),
-                                                        d_intermediate_states[1:-1].flip(dims = [0])):
+                for next_adj_time, d_inter_state in zip(
+                    intermediate_times[1:-1].flip(dims=[0]),
+                    d_intermediate_states[1:-1].flip(dims=[0]),
+                ):
                     # The incoming gradients of the intermediate states are the gradients of the state defined at
                     # various points in time. For each of these incoming gradients, we need to integrate up to that
                     # temporal boundary and add them to adjoint state
@@ -186,10 +212,8 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
             parameter_gradients = []
 
             for p_shape, num_elem in zip(parameter_shapes, map(math.prod, parameter_shapes)):
-                parameter_gradients.append(None)
-                adj_parameter_gradients, parameter_gradients[-1] = adj_parameter_gradients[
-                                                                   num_elem:], adj_parameter_gradients[
-                                                                               :num_elem].reshape(p_shape)
+                parameter_gradients.append(adj_parameter_gradients[:num_elem].reshape(p_shape))
+                adj_parameter_gradients = adj_parameter_gradients[num_elem:]
 
             input_grads[6:] = parameter_gradients
         return tuple(input_grads)
@@ -199,17 +223,17 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
 
 def get_vmap_method(integrator_type):
     def __internal_vmap(
-            info,
-            in_dims,
-            forward_fn: typing.Callable[
-                [torch.Tensor, torch.Tensor, typing.Any], torch.Tensor
-            ],
-            x0: torch.Tensor,
-            t0: torch.Tensor,
-            t1: torch.Tensor,
-            dt: torch.Tensor,
-            integrator_kwargs,
-            *additional_dynamic_args,
+        info,
+        in_dims,
+        forward_fn: typing.Callable[
+            [torch.Tensor, torch.Tensor, typing.Any], torch.Tensor
+        ],
+        x0: torch.Tensor,
+        t0: torch.Tensor,
+        t1: torch.Tensor,
+        dt: torch.Tensor,
+        integrator_kwargs,
+        *additional_dynamic_args,
     ):
         _, x0_bdim, t0_bdim, t1_bdim, _, _, *further_arg_dims = in_dims
 
@@ -291,7 +315,7 @@ def get_integrator(
     # Forward integration method
     __internal_forward = get_forward_method(__integrator_type, use_local_extrapolation)
     # Backward integration method
-    __internal_backward = get_backward_method()
+    __internal_backward = get_backward_method(__integrator_type)
     # Enables batching along arbitrary dimensions using `torch.vmap`
     __internal_vmap = get_vmap_method(__integrator_type)
 
