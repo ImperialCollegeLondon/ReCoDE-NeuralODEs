@@ -1,4 +1,5 @@
 import torch
+import einops
 
 
 def exponential_fn(x, t, decay_constant=-1.0):
@@ -23,7 +24,16 @@ def exponential_fn_solution(initial_state, t, decay_constant=-1.0):
     return initial_state * torch.exp(decay_constant * t)
 
 
-def get_simple_harmonic_oscillator_matrix(frequency, damping):
+def get_simple_harmonic_oscillator_matrix(
+    frequency: torch.Tensor, damping: torch.Tensor
+) -> torch.Tensor:
+    """
+    Computes the matrix of a simple harmonic oscillator.
+
+    :param frequency: The frequency of the oscillator.
+    :param damping: The damping coefficient of the oscillator.
+    :return:
+    """
     return torch.stack(
         [
             # no x term for the derivative of x as it is equal to v
@@ -37,9 +47,18 @@ def get_simple_harmonic_oscillator_matrix(frequency, damping):
     )
 
 
-def simple_harmonic_oscillator(x, t, frequency, damping):
-    # The dynamics above can easily be represented as a matrix multiplication
-    # First the matrix with the corresponding terms
+def simple_harmonic_oscillator(
+    x: torch.Tensor, t: torch.Tensor, frequency: torch.Tensor, damping: torch.Tensor
+):
+    """
+    Computes the derivative vector of a simple harmonic oscillator with given frequency and damping.
+
+    :param x: The current state.
+    :param t: The current time (unused).
+    :param frequency: The frequency of the oscillator.
+    :param damping: The damping coefficient of the oscillator.
+    :return: The time derivative of the SHA.
+    """
     A = get_simple_harmonic_oscillator_matrix(frequency, damping)
     # We implement the matrix multiplication using einops
     # This is not necessarily the most efficient, but it allows

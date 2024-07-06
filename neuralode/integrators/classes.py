@@ -41,6 +41,34 @@ class Integrator(
     def use_local_extrapolation(self):
         raise NotImplementedError
 
+    @staticmethod
+    def setup_context(
+        ctx: torch.autograd.function.FunctionCtx,
+        inputs: typing.Any,
+        outputs: typing.Any,
+    ) -> None:
+        forward_fn, x0, t0, t1, dt, integrator_kwargs, *additional_dynamic_args = inputs
+        c_state, c_time, intermediate_states, intermediate_times, error_in_state = (
+            outputs
+        )
+
+        non_differentiable_parameters = [dt]
+        backward_save_variables = [
+            x0,
+            t0,
+            t1,
+            dt,
+            c_state,
+            c_time,
+            intermediate_states,
+            intermediate_times,
+            *additional_dynamic_args,
+        ]
+        ctx.mark_non_differentiable(*non_differentiable_parameters)
+        ctx.save_for_backward(*backward_save_variables)
+        ctx.integrator_kwargs = integrator_kwargs
+        ctx.forward_fn = forward_fn
+
 
 def create_integrator_class(
     integrator_tableau: torch.Tensor,
@@ -81,34 +109,6 @@ def finalise_integrator_class(
     forward_method: signatures.forward_method_signature,
     backward_method: signatures.backward_method_signature,
 ) -> typing.Type[Integrator]:
-    if not integrator_type.is_adaptive:
-        # If the method isn't adaptive, neither atol nor rtol are required, but because of
-        # how `torch.autograd.Function` works, we cannot have keyword arguments
-        # For that reason, we use an alternative implementation to fill those values with a stub
-        def __internal_forward_nonadaptive(
-            ctx,
-            forward_fn: signatures.integration_fn_signature,
-            x0: torch.Tensor,
-            t0: torch.Tensor,
-            t1: torch.Tensor,
-            dt: torch.Tensor,
-            *additional_dynamic_args,
-        ) -> signatures.forward_method_nonadaptive_signature:
-            return forward_method(
-                ctx,
-                forward_fn,
-                x0,
-                t0,
-                t1,
-                dt,
-                torch.inf,
-                torch.inf,
-                *additional_dynamic_args,
-            )
-
-        integrator_type.forward = staticmethod(__internal_forward_nonadaptive)
-    else:
-        integrator_type.forward = staticmethod(forward_method)
+    integrator_type.forward = staticmethod(forward_method)
     integrator_type.backward = staticmethod(backward_method)
-
     return integrator_type
