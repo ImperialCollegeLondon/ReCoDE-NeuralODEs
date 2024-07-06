@@ -25,6 +25,8 @@ def plot_trajectory_with_reference(
         ref_traj = [
             i.detach().cpu() if torch.is_tensor(i) else i for i in reference_trajectory
         ]
+    else:
+        ref_traj = None
 
     if axes is None:
         fig = plt.figure(figsize=(12, 5), tight_layout=True)
@@ -44,11 +46,11 @@ def plot_trajectory_with_reference(
             [i.ravel()[cidx] for i in plot_states],
             marker=".",
             markersize=4.0,
-            label=f"{method_label}:[{cidx}]",
+            label=f"{method_label}:[{cidx}]" if method_label is not None else method_label,
             linestyle="--",
         )
     ax.set_ylabel(r"$\vec{x}(t)$")
-    if reference_trajectory is not None:
+    if ref_traj is not None:
         for cidx in range(ref_traj[0].ravel().numel()):
             ax.plot(
                 plot_times,
