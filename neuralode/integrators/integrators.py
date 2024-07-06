@@ -8,7 +8,10 @@ __all__ = [
     "get_forward_method",
     "get_backward_method",
     "get_integrator",
-    "IntegrateRK4",
+    "MidpointIntegrator",
+    "RK4Integrator",
+    "AdaptiveRK45Integrator",
+    "AdaptiveRK87Integrator",
 ]
 
 
