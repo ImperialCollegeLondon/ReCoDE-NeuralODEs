@@ -108,7 +108,9 @@ def finalise_integrator_class(
     integrator_type: typing.Type[Integrator],
     forward_method: signatures.forward_method_signature,
     backward_method: signatures.backward_method_signature,
+    vmap_method,
 ) -> typing.Type[Integrator]:
     integrator_type.forward = staticmethod(forward_method)
     integrator_type.backward = staticmethod(backward_method)
+    integrator_type.vmap = staticmethod(vmap_method)
     return integrator_type

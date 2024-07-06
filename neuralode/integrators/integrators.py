@@ -7,6 +7,7 @@ from neuralode.integrators import routines
 __all__ = [
     "get_forward_method",
     "get_backward_method",
+    "get_vmap_method",
     "get_integrator",
     "MidpointIntegrator",
     "RK4Integrator",
@@ -184,6 +185,87 @@ def get_backward_method():
     return __internal_backward
 
 
+def get_vmap_method(integrator_type):
+    def __internal_vmap(
+            info,
+            in_dims,
+            forward_fn: typing.Callable[
+                [torch.Tensor, torch.Tensor, typing.Any], torch.Tensor
+            ],
+            x0: torch.Tensor,
+            t0: torch.Tensor,
+            t1: torch.Tensor,
+            dt: torch.Tensor,
+            integrator_kwargs,
+            *additional_dynamic_args,
+    ):
+        _, x0_bdim, t0_bdim, t1_bdim, _, _, *further_arg_dims = in_dims
+
+        # The strategy is: expand {x0, t0, t1} to all have the dimension
+        # being vmapped over.
+        # Then, call back into Integrator(expanded_x0, expanded_t0, expanded_t1).
+
+        def maybe_expand_bdim_at_front(x, x_bdim):
+            if x_bdim is None:
+                return x.expand(info.batch_size, *x.shape)
+            return x.movedim(x_bdim, 0)
+
+        # If the Tensor doesn't have the dimension being vmapped over,
+        # expand it out. Otherwise, move it to the front of the Tensor
+        x0 = maybe_expand_bdim_at_front(x0, x0_bdim)
+
+        # If both t0 and t1 are 0d tensors, then we can simply compute forward_fn in a batched fashion allowing
+        # us to avoid calling the integration multiples times. Otherwise, we must call it once for each set of
+        # initial conditions, initial times and final times.
+        fn_can_be_batched = t0_bdim is None and t1_bdim is None
+        if not fn_can_be_batched:
+            t0 = maybe_expand_bdim_at_front(t0, t0_bdim)
+            t1 = maybe_expand_bdim_at_front(t1, t1_bdim)
+
+            res = [
+                integrator_type.apply(
+                    forward_fn,
+                    _x0,
+                    _t0,
+                    _t1,
+                    dt,
+                    integrator_kwargs,
+                    *additional_dynamic_args,
+                )
+                for _x0, _t0, _t1 in zip(x0, t0, t1)
+            ]
+            res = [
+                torch.stack([i[0] for i in res]),
+                torch.stack([i[1] for i in res]),
+                *[[i[idx] for i in res] for idx in range(2, len(res[0]))],
+            ]
+            return tuple(res), (0, 0, None, None, None)
+        else:
+            batched_forward_fn = torch.vmap(
+                forward_fn, in_dims=(x0_bdim, t0_bdim, *further_arg_dims)
+            )
+            print(batched_forward_fn(x0, t0, *additional_dynamic_args))
+            res = integrator_type.apply(
+                batched_forward_fn,
+                x0,
+                t0,
+                t1,
+                dt,
+                integrator_kwargs,
+                *additional_dynamic_args,
+            )
+            res = (
+                res[0],
+                maybe_expand_bdim_at_front(res[1], None),
+                res[2].transpose(1, 0),
+                maybe_expand_bdim_at_front(res[3], None),
+                maybe_expand_bdim_at_front(res[4], None),
+            )
+            return tuple(res), (0, 0, 0, 0, 0)
+
+    return __internal_vmap
+
+
 def get_integrator(
     integrator_tableau: torch.Tensor,
     integrator_order: int,
@@ -198,9 +280,11 @@ def get_integrator(
     __internal_forward = get_forward_method(__integrator_type, use_local_extrapolation)
     # Backward integration method
     __internal_backward = get_backward_method()
+    # Enables batching along arbitrary dimensions using `torch.vmap`
+    __internal_vmap = get_vmap_method(__integrator_type)
 
     classes.finalise_integrator_class(
-        __integrator_type, __internal_forward, __internal_backward
+        __integrator_type, __internal_forward, __internal_backward, __internal_vmap
     )
 
     return __integrator_type
