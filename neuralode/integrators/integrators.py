@@ -1,8 +1,13 @@
+from typing import Tuple, Any
+
 import torch
 import typing
+import math
 
 from neuralode.integrators import classes
 from neuralode.integrators import routines
+from neuralode.integrators import helpers
+from neuralode.integrators import signatures
 
 __all__ = [
     "get_forward_method",
@@ -16,7 +21,7 @@ __all__ = [
 ]
 
 
-def get_forward_method(integrator_type, use_local_extrapolation):
+def get_forward_method(integrator_type, use_local_extrapolation) -> signatures.forward_method_signature:
     def __internal_forward(
         fn: typing.Callable[[torch.Tensor, torch.Tensor, typing.Any], torch.Tensor],
         x0: torch.Tensor,
@@ -86,100 +91,107 @@ def get_forward_method(integrator_type, use_local_extrapolation):
     return __internal_forward
 
 
-def get_backward_method():
-    def __internal_backward(
-        ctx: torch.autograd.function.FunctionCtx,
-        d_c_state: torch.Tensor,
-        d_c_time: torch.Tensor,
-        d_intermediate_states: torch.Tensor,
-        d_intermediate_times: torch.Tensor,
-        d_error_in_state: torch.Tensor,
-    ) -> torch.Tensor | None:
+def get_backward_method(integrator_type) -> signatures.backward_method_signature:
+    def __internal_backward(ctx: torch.autograd.function.FunctionCtx,
+                            d_c_state: torch.Tensor,
+                            d_c_time: torch.Tensor,
+                            d_intermediate_states: torch.Tensor,
+                            d_intermediate_times: torch.Tensor,
+                            d_error_in_state: torch.Tensor) -> tuple[Any, ...]:
         """
-        This function computes the gradient of the input variables for `__internal_forward` by exploiting the fact
-        that PyTorch can track the whole graph of operations used to derive a specific result. Thus each time backward is called,
-        we compute the actual graph of operations and propagate derivatives through it. Unfortunately, this is an exceptionally
-        slow method of computation that also uses a lot of memory.
+        This function computes the gradient of the input variables for `__internal_forward` by implementing
+        the adjoint method. This involves computing the adjoint state and adjoint state equation and systematically
+        integrating backwards, from t1 to t0, accumulating the gradient to obtain the gradient wrt. the input variables.
 
-        This is implemented here as a demonstration of how we could compute gradients and how these are expected to be propagated back
-        to the autograd tape.
-
-        :param ctx:
-        :param d_c_state:
-        :param d_c_time:
-        :param d_intermediate_states:
-        :param d_intermediate_times:
-        :param d_error_in_state:
-        :return:
+        :param ctx: Function context for storing variables and function from the forward pass
+        :param d_c_state: incoming gradient of c_state
+        :param d_c_time: incoming gradient of c_time
+        :param d_intermediate_states: incoming gradient of intermediate_states
+        :param d_intermediate_times: incoming gradient of intermediate_times
+        :param d_error_in_state: incoming gradient of error_in_state. This output is non-differentiable.
+        :return: The gradients wrt. all the inputs.
         """
-        # First, we retrieve our integration function that we stored in `integration_function`
-        fn = ctx.integration_function
-        # Then we retrieve the input variables and clone them to avoid influencing them in the later operations
-        x0, t0, t1, dt, atol, rtol, _, _, _, _, *additional_dynamic_args = [
-            i.clone().requires_grad_(True) for i in ctx.saved_tensors
-        ]
-        inputs = fn, x0, t0, t1, dt, atol, rtol, *additional_dynamic_args
 
-        def forward_fn(x, t):
-            return fn(x, t, *additional_dynamic_args)
+        # First, we retrieve our integration function that we stored in `__internal_forward`
+        forward_fn: signatures.integration_fn_signature = ctx.forward_fn
+
+        integrator_kwargs = ctx.integrator_kwargs
+
+        # Then we retrieve the input variables
+        x0, t0, t1, dt, c_state, c_time, intermediate_states, intermediate_times, *additional_dynamic_args = ctx.saved_tensors
+
+        inputs = forward_fn, x0, t0, t1, dt, integrator_kwargs, *additional_dynamic_args
+        input_grads: list[torch.Tensor | None] = [None for _ in range(len(inputs))]
 
         if any(ctx.needs_input_grad):
+            # Construct the adjoint equation
+            adjoint_fn = helpers.construct_adjoint_fn(forward_fn, c_state.shape)
+
             # We ensure that gradients are enabled so that autograd tracks the variable operations
-            with torch.enable_grad():
+            # For pointwise functionals, the initial adjoint state is simply the incoming gradients
+            parameter_shapes = [i.shape for i in additional_dynamic_args]
+            packed_reverse_state = torch.cat([
+                c_state.ravel(),
+                (d_c_state + d_intermediate_states[-1]).ravel(),
+            ])
+            if len(additional_dynamic_args) > 0:
+                packed_reverse_state = torch.cat([
+                    packed_reverse_state,
+                    torch.zeros(sum(map(math.prod, parameter_shapes)), device = c_state.device, dtype = c_state.dtype)
+                ])
 
-                def forward_fn(state, time):
-                    return fn(state, time, *additional_dynamic_args)
+            current_adj_time = t1
+            current_adj_state = packed_reverse_state
 
-                c_state = x0.clone()
-                c_time = t0.clone()
+            if torch.any(d_intermediate_states != 0.0):
+                adj_indices = torch.arange(c_state.numel(), 2*c_state.numel(), device=c_state.device)
+                # We only need to account for the incoming gradients if any are non-zero
+                for next_adj_time, d_inter_state in zip(intermediate_times[1:-1].flip(dims = [0]),
+                                                        d_intermediate_states[1:-1].flip(dims = [0])):
+                    # The incoming gradients of the intermediate states are the gradients of the state defined at
+                    # various points in time. For each of these incoming gradients, we need to integrate up to that
+                    # temporal boundary and add them to adjoint state
+                    if torch.all(d_inter_state == 0.0):
+                        # No need to integrate up to the boundary if the incoming gradients are zero
+                        continue
+                    current_adj_state, current_adj_time, _, _, _ = integrator_type.apply(adjoint_fn,
+                                                                                         current_adj_state,
+                                                                                         current_adj_time,
+                                                                                         next_adj_time, -dt,
+                                                                                         integrator_kwargs,
+                                                                                         *additional_dynamic_args)
+                    current_adj_state = torch.scatter(current_adj_state, 0, adj_indices, d_inter_state.ravel())
 
-                c_state, c_time, _, _ = routines.integrate_system(
-                    forward_fn, c_state, c_time, t1, dt, ctx.integrator_kwargs
-                )
+            final_adj_state, final_adj_time, _, _, _ = integrator_type.apply(adjoint_fn, current_adj_state,
+                                                                             current_adj_time, t0, -dt, integrator_kwargs,
+                                                                             *additional_dynamic_args)
 
-            # We collate the outputs that we can compute gradients for
-            # with this method, we are restricted to the final state and time
-            outputs = (
-                c_state,
-                c_time,
-            )  # , intermediate_states, intermediate_times, error_in_state
-            grad_outputs = (
-                d_c_state,
-                d_c_time,
-                d_intermediate_states,
-                d_intermediate_times,
-                d_error_in_state,
-            )
+            # This should be equivalent to the initial state we passed in, but it will
+            # be appropriately attached to the autograd graph for higher order derivatives
+            adj_initial_state = final_adj_state[:c_state.numel()].reshape(c_state.shape)
+            adj_variables = final_adj_state[c_state.numel():2*c_state.numel()].reshape(c_state.shape)
+            adj_parameter_gradients = final_adj_state[2*c_state.numel():]
 
-            # We also only consider the input and output variables that actually have gradients enabled
-            inputs_with_grad = [
-                i for idx, i in enumerate(inputs) if ctx.needs_input_grad[idx]
-            ]
-            outputs_with_grad = [
-                idx for idx, i in enumerate(outputs) if i.grad_fn is not None
-            ]
+            # The gradients of the incoming state are equal to the gradients from the first element of the
+            # intermediate state plus the lagrange variables
+            input_grads[1] = adj_variables.reshape(c_state.shape) + d_intermediate_states[0].ravel().reshape(c_state.shape)
 
-            grad_of_inputs_with_grad = torch.autograd.grad(
-                [outputs[idx] for idx in outputs_with_grad],
-                inputs_with_grad,
-                grad_outputs=[grad_outputs[idx] for idx in outputs_with_grad],
-                allow_unused=True,
-                materialize_grads=True,
-            )
-        else:
-            grad_of_inputs_with_grad = None
-        # For each input we must return a gradient
-        # We create a list of None values
-        # (this tells autograd that there is no gradient for those variables).
-        # And for each variable that does have a gradient, we fill the values in
-        # before returning the list
-        input_grads = [None for _ in range(len(inputs))]
-        if grad_of_inputs_with_grad:
-            for idx in range(len(inputs)):
-                if ctx.needs_input_grad[idx]:
-                    input_grads[idx], *grad_of_inputs_with_grad = (
-                        grad_of_inputs_with_grad
-                    )
+            # The gradient of the initial time is equal to the gradient from the first element of the intermediate times
+            # minus the product of the lagrange variables and the derivative of the system at the initial time
+            input_grads[2] = (d_intermediate_times[0].ravel() - torch.sum(adj_variables.ravel()*forward_fn(adj_initial_state, final_adj_time, *additional_dynamic_args).ravel())).reshape(c_time.shape)
+            # The gradient of the final time is equal to the gradient from the gradient in the final state
+            # plus the product of the lagrange variables and the derivative of the system at the final time
+            input_grads[3] = ((d_c_time + d_intermediate_times[-1]) + torch.sum((d_c_state + d_intermediate_states[-1]).ravel()*forward_fn(c_state, c_time, *additional_dynamic_args).ravel())).reshape(t0.shape)
+
+            parameter_gradients = []
+
+            for p_shape, num_elem in zip(parameter_shapes, map(math.prod, parameter_shapes)):
+                parameter_gradients.append(None)
+                adj_parameter_gradients, parameter_gradients[-1] = adj_parameter_gradients[
+                                                                   num_elem:], adj_parameter_gradients[
+                                                                               :num_elem].reshape(p_shape)
+
+            input_grads[6:] = parameter_gradients
         return tuple(input_grads)
 
     return __internal_backward
@@ -271,7 +283,7 @@ def get_integrator(
     integrator_order: int,
     use_local_extrapolation: bool = True,
     integrator_name: str = None,
-) -> typing.Type[torch.autograd.Function]:
+) -> typing.Type[classes.Integrator]:
     __integrator_type = classes.create_integrator_class(
         integrator_tableau, integrator_order, use_local_extrapolation, integrator_name
     )
