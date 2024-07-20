@@ -60,7 +60,6 @@ class Integrator(
             dt,
             c_state,
             c_time,
-            intermediate_states,
             intermediate_times,
             *additional_dynamic_args,
         ]

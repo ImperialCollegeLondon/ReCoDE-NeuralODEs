@@ -31,7 +31,7 @@ def get_forward_method(
         t1: torch.Tensor,
         dt: torch.Tensor,
         integrator_kwargs: dict[str, torch.Tensor],
-        *additional_dynamic_args,
+        *additional_dynamic_args: list[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         A general integration routine for solving an Initial Value Problem
@@ -129,7 +129,6 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
             dt,
             c_state,
             c_time,
-            intermediate_states,
             intermediate_times,
             *additional_dynamic_args,
         ) = ctx.saved_tensors
@@ -140,7 +139,7 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
         if any(ctx.needs_input_grad):
             # Construct the adjoint equation
             adjoint_fn = helpers.construct_adjoint_fn(forward_fn, c_state.shape)
-
+            
             # We ensure that gradients are enabled so that autograd tracks the variable operations
             # For pointwise functionals, the initial adjoint state is simply the incoming gradients
             parameter_shapes = [i.shape for i in additional_dynamic_args]
@@ -194,7 +193,10 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
 
             # This should be equivalent to the initial state we passed in, but it will
             # be appropriately attached to the autograd graph for higher order derivatives
-            adj_initial_state = final_adj_state[:c_state.numel()].reshape(c_state.shape)
+            if torch.is_grad_enabled() and any(i.requires_grad for i in [d_c_state, d_c_time, d_intermediate_states]):
+                adj_initial_state = final_adj_state[:c_state.numel()].reshape(c_state.shape)
+            else:
+                adj_initial_state = x0.clone()
             adj_variables = final_adj_state[c_state.numel():2*c_state.numel()].reshape(c_state.shape)
             adj_parameter_gradients = final_adj_state[2*c_state.numel():]
 
@@ -216,6 +218,11 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
                 adj_parameter_gradients = adj_parameter_gradients[num_elem:]
 
             input_grads[6:] = parameter_gradients
+            inputs_grad_not_finite = list(map(lambda x: False if x is None else (~x.isfinite()).any(), input_grads))
+            if any(inputs_grad_not_finite):
+                raise ValueError(f"Encountered non-finite grads for inputs: {[
+                    inp_idx for inp_idx, inp_grad_is_not_finite in enumerate(inputs_grad_not_finite) if inp_grad_is_not_finite
+                ]}")
         return tuple(input_grads)
 
     return __internal_backward
