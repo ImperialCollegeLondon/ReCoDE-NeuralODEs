@@ -1,4 +1,5 @@
 import torch
+import einops
 
 
 def exponential_fn(x, t, decay_constant=-1.0):
@@ -21,3 +22,53 @@ def exponential_fn_solution(initial_state, t, decay_constant=-1.0):
     :return: the state at time t
     """
     return initial_state * torch.exp(decay_constant * t)
+
+
+def get_simple_harmonic_oscillator_matrix(
+    frequency: torch.Tensor, damping: torch.Tensor
+) -> torch.Tensor:
+    """
+    Computes the matrix of a simple harmonic oscillator.
+
+    :param frequency: The frequency of the oscillator.
+    :param damping: The damping coefficient of the oscillator.
+    :return:
+    """
+    return torch.stack(
+        [
+            # no x term for the derivative of x as it is equal to v
+            torch.stack(
+                [torch.zeros_like(frequency), torch.ones_like(frequency)], dim=-1
+            ),
+            # first we have the omega^2 term, then the 2*zeta*omega term
+            torch.stack([-(frequency**2), -2 * frequency * damping], dim=-1),
+        ],
+        dim=-2,
+    )
+
+
+def simple_harmonic_oscillator(
+    x: torch.Tensor, t: torch.Tensor, frequency: torch.Tensor, damping: torch.Tensor
+):
+    """
+    Computes the derivative vector of a simple harmonic oscillator with given frequency and damping.
+
+    :param x: The current state.
+    :param t: The current time (unused).
+    :param frequency: The frequency of the oscillator.
+    :param damping: The damping coefficient of the oscillator.
+    :return: The time derivative of the SHA.
+    """
+    A = get_simple_harmonic_oscillator_matrix(frequency, damping)
+    # We implement the matrix multiplication using einops
+    # This is not necessarily the most efficient, but it allows
+    # us to track the exact operation without worrying about the shapes
+    # of our tensors too much
+    # You can read '...,ij,...j->...i' as:
+    #   - The first argument is a tensor with arbitrary dimensions, but
+    #   the last two of which are of interest, labelled as 'i' and 'j'
+    #   - The second argument is a tensor with arbitrary dimensions, but
+    #   the last of which is commensurate with the number of rows of the input matrix
+    #   - Take the sum of A[...,i,j]*x[...,j] over all 'j' and the output will be indexed
+    #   by 'i' in the last dimension
+    return einops.einsum(A, x, "... row col,... col->... row")

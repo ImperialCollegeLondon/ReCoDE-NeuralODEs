@@ -65,4 +65,109 @@ def compensated_sum(iterable_to_sum: typing.Iterable[torch.Tensor]) -> torch.Ten
         partial_sum, truncated_bits = partial_compensated_sum(
             v, (partial_sum, truncated_bits)
         )
-    return partial_sum + truncated_bits  # Add truncated bits back to the sum
+    if partial_sum is None:
+        final_sum = 0.0
+    else:
+        final_sum = partial_sum + truncated_bits  # Add truncated bits back to the sum
+    return final_sum
+
+
+def next_value(v: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
+    """
+    Returns the next smallest number in the direction of `direction`.
+
+    If `direction` is positive, then it is the smallest number larger than `v`.
+    If `direction` is negative, then it is the larger number smaller than `v`.
+
+    :param v:
+    :param direction:
+    :return: The next value
+    """
+    nearest_base_2_val = v.abs().log2().floor().exp2()
+    return v + torch.copysign(
+        nearest_base_2_val * torch.finfo(v.dtype).eps + torch.finfo(v.dtype).eps,
+        direction,
+    )
+
+
+def masked_grad(
+    outputs: torch.Tensor, grad_vars: list[torch.Tensor], *args, **kwargs
+) -> list[torch.Tensor | None]:
+    """
+    Computes a masked version of `torch.autograd.grad` reducing the issues with passing in variables
+    that don't require grad and automagically outputting `None` for variables that don't have a gradient associated
+    with them.
+
+    :param outputs: The values whose gradients are needed
+    :param grad_vars: The variables with respect to which the gradients should be computed
+    :param args: positional arguments for `torch.autograd.grad`
+    :param kwargs: keyword arguments for `torch.autograd.grad`
+    :return: list of gradients of the outputs wrt. every input in `grad_vars`
+    """
+    grad_vars_mask = [i.requires_grad for i in grad_vars]
+
+    final_grads: list[torch.Tensor | None] = [None for i in grad_vars]
+
+    if any(grad_vars_mask):
+        grad_vars_needed = [
+            grad_vars[idx]
+            for idx, grad_needed in enumerate(grad_vars_mask)
+            if grad_needed
+        ]
+        grad_results = torch.autograd.grad(
+            outputs, tuple(grad_vars_needed), *args, **kwargs
+        )
+        if grad_results:
+            for idx, (grad_needed, grad_v) in enumerate(zip(grad_vars_mask, grad_vars)):
+                if grad_needed:
+                    final_grads[idx] = grad_results[0]
+                    grad_results = grad_results[1:]
+                else:
+                    final_grads[idx] = (
+                        torch.zeros_like(grad_v)
+                        if kwargs.get("materialize_grads", False)
+                        else None
+                    )
+    return final_grads
+
+
+def interp_hermite(
+    xs: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dy: torch.Tensor
+) -> torch.Tensor:
+    """
+    Piecewise Hermite cubic spline interpolation.
+
+    Based on the implementation shown in [1].
+
+    [1]: https://en.wikipedia.org/wiki/Cubic_Hermite_spline
+
+    :param xs: Points to interpolate to
+    :param x: Nodes of the input values
+    :param y: The function value at each node
+    :param dy: The function slope at each node
+    :return: The function interpolated to the points `xs
+    """
+
+    sample_x = xs.ravel()
+    xidx = torch.searchsorted(x, sample_x)
+    xidx = torch.clamp(xidx, 0, x.shape[0] - 2)
+
+    x0 = x[xidx]
+    x1 = x[xidx + 1]
+
+    y0 = y[xidx]
+    y1 = y[xidx + 1]
+    dy0 = dy[xidx]
+    dy1 = dy[xidx + 1]
+
+    dx = x1 - x0
+    t = (sample_x - x0) / dx
+    t2 = t.square()
+    t3 = t * t.square()
+
+    h00 = (2 * t3 - 3 * t2 + 1)[..., *[None] * (y.dim() - 1)]
+    h10 = ((t3 - 2 * t2 + t) * dx)[..., *[None] * (y.dim() - 1)]
+    h01 = (-2 * t3 + 3 * t2)[..., *[None] * (y.dim() - 1)]
+    h11 = ((t3 - t2) * dx)[..., *[None] * (y.dim() - 1)]
+
+    return h00 * y0 + h10 * dy0 + h01 * y1 + h11 * dy1
