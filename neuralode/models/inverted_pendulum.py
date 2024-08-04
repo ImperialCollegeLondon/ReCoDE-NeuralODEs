@@ -4,23 +4,31 @@ import itertools
 __all__ = ["CartPoleNet"]
 
 
+class SinActivation(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return torch.sin(x)
+
+
 class CartPoleNet(torch.nn.Module):
-    def __init__(self, max_force=256.0, num_hidden_neurons=128, num_hidden_layers=4):
+    def __init__(self, max_force=160.0, num_hidden_neurons=128, num_hidden_layers=4):
         super().__init__()
         hidden_layers = itertools.chain.from_iterable(
             [
                 (
                     torch.nn.Linear(num_hidden_neurons, num_hidden_neurons),
-                    torch.nn.Tanh(),
+                    SinActivation(),
                 )
                 for _ in range(num_hidden_layers)
             ]
         )
         self.internal_net = torch.nn.Sequential(
             torch.nn.Linear(8, num_hidden_neurons),
-            torch.nn.Tanh(),
+            SinActivation(),
             *hidden_layers,
-            torch.nn.Linear(num_hidden_neurons, 1, bias=False),
+            torch.nn.Linear(num_hidden_neurons, 1),
         )
         self.max_force = torch.nn.Parameter(
             torch.tensor(max_force), requires_grad=False

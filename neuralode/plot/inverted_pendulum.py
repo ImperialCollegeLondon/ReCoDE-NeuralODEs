@@ -1,8 +1,10 @@
+import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 
+@torch.no_grad
 def plot_pendulum(pendulum_x, pendulum_y, cart_x, cart_y, time, force):
     fig = plt.figure(tight_layout=True)
     ax = fig.add_subplot(211, aspect="equal")
@@ -21,7 +23,16 @@ def plot_pendulum(pendulum_x, pendulum_y, cart_x, cart_y, time, force):
     ax.scatter(cart_x[0].item(), 0.0, marker="o")
     ax.scatter(cart_x[-1].item(), 0.0, marker="x")
     ax.axhline(cart_y.cpu().mean(), linewidth=0.5, color="k")
-    ax.set_xlim(-2.5, 2.5)
+    ax.axvline(0.0, ymin=-2, ymax=2, linewidth=0.5, color="k")
+
+    min_x = min(pendulum_x.min().item(), cart_x.min().item())
+    min_x = int(min_x * 2) / 2
+    min_x = min(max(min_x, -6.5), -2.5)
+    max_x = max(pendulum_x.max().item(), cart_x.max().item())
+    max_x = int(max_x * 2) / 2
+    max_x = max(min(max_x, 6.5), 2.5)
+
+    ax.set_xlim(min_x, max_x)
     ax.set_ylim(-2, 2)
     ax = fig.add_subplot(212)
     ax.plot(time.cpu().numpy(), force.cpu().numpy())
@@ -30,6 +41,7 @@ def plot_pendulum(pendulum_x, pendulum_y, cart_x, cart_y, time, force):
     return fig
 
 
+@torch.no_grad
 def animate_pendulum(
     pendulum_x,
     pendulum_y,
@@ -81,6 +93,7 @@ def animate_pendulum(
             head_starts_at_zero=True,
         )
     ax.axhline(cart_y.mean(), linewidth=0.5, color="k")
+    ax.axvline(0.0, ymin=-2, ymax=2, linewidth=0.5, color="k")
 
     def animate(frame_index):
         pole_plot.set_data(
