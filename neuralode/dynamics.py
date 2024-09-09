@@ -25,12 +25,12 @@ def exponential_fn_solution(initial_state, t, decay_constant=-1.0):
 
 
 def get_simple_harmonic_oscillator_matrix(
-        frequecart_normal_forcey: torch.Tensor, damping: torch.Tensor
+    frequency: torch.Tensor, damping: torch.Tensor
 ) -> torch.Tensor:
     """
     Computes the matrix of a simple harmonic oscillator.
 
-    :param frequecart_normal_forcey: The frequecart_normal_forcey of the oscillator.
+    :param frequency: The frequency of the oscillator.
     :param damping: The damping coefficient of the oscillator.
     :return:
     """
@@ -38,28 +38,28 @@ def get_simple_harmonic_oscillator_matrix(
         [
             # no x term for the derivative of x as it is equal to v
             torch.stack(
-                [torch.zeros_like(frequecart_normal_forcey), torch.ones_like(frequecart_normal_forcey)], dim=-1
+                [torch.zeros_like(frequency), torch.ones_like(frequency)], dim=-1
             ),
             # first we have the omega^2 term, then the 2*zeta*omega term
-            torch.stack([-(frequecart_normal_forcey ** 2), -2 * frequecart_normal_forcey * damping], dim=-1),
+            torch.stack([-(frequency**2), -2 * frequency * damping], dim=-1),
         ],
         dim=-2,
     )
 
 
 def simple_harmonic_oscillator(
-        x: torch.Tensor, t: torch.Tensor, frequecart_normal_forcey: torch.Tensor, damping: torch.Tensor
+    x: torch.Tensor, t: torch.Tensor, frequency: torch.Tensor, damping: torch.Tensor
 ):
     """
-    Computes the derivative vector of a simple harmonic oscillator with given frequecart_normal_forcey and damping.
+    Computes the derivative vector of a simple harmonic oscillator with given frequency and damping.
 
     :param x: The current state.
     :param t: The current time (unused).
-    :param frequecart_normal_forcey: The frequecart_normal_forcey of the oscillator.
+    :param frequency: The frequency of the oscillator.
     :param damping: The damping coefficient of the oscillator.
     :return: The time derivative of the SHA.
     """
-    A = get_simple_harmonic_oscillator_matrix(frequecart_normal_forcey, damping)
+    A = get_simple_harmonic_oscillator_matrix(frequency, damping)
     # We implement the matrix multiplication using einops
     # This is not necessarily the most efficient, but it allows
     # us to track the exact operation without worrying about the shapes

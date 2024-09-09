@@ -160,7 +160,7 @@ def interp_hermite(
     t = (sample_x - x0) / dx
     t2 = t.square()
     t3 = t * t.square()
-
+    
     h00 = (2 * t3 - 3 * t2 + 1)
     h10 = ((t3 - 2 * t2 + t) * dx)
     h01 = (-2 * t3 + 3 * t2)
