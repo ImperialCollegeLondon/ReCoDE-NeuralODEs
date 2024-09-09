@@ -100,7 +100,7 @@ def integrate_system(
         delta_state = (
             delta_state_upper if use_local_extrapolation else delta_state_lower
         )
-
+        
         # Sometimes, the estimated delta is not finite because of divergence
         # either in the implementation of forward_fn or because of accumulated errors.
         # We raise an error when this happens to let the user know to debug the issue
