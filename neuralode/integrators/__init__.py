@@ -3,6 +3,6 @@ from neuralode.integrators import signatures
 from neuralode.integrators import helpers
 from neuralode.integrators import routines
 
-from neuralode.integrators.integrators import IntegrateRK4
+from neuralode.integrators.integrators import *
 
-__all__ = ["classes", "signatures", "helpers", "routines", "IntegrateRK4"]
+__all__ = ["classes", "signatures", "helpers", "routines"]

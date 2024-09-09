@@ -16,8 +16,8 @@ forward_method_signature = typing.Callable[
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        float | torch.Tensor,
-        float | torch.Tensor,
+        dict[str, torch.Tensor],
+        *list[typing.Any]
     ],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ]
@@ -31,5 +31,5 @@ backward_method_signature = typing.Callable[
         torch.Tensor,
         torch.Tensor,
     ],
-    tuple[typing.Optional[torch.Tensor]],
+    tuple[typing.Optional[torch.Tensor], ...],
 ]

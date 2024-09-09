@@ -17,28 +17,28 @@ class Integrator(
 
     @property
     @abc.abstractmethod
-    def integrator_tableau(self):
+    def integrator_tableau(self) -> torch.Tensor:
         # Butcher tableau for the integrator
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def integrator_order(self):
+    def integrator_order(self) -> int:
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def is_adaptive(self):
+    def is_adaptive(self) -> bool:
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def number_of_stages(self):
+    def number_of_stages(self) -> int:
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def use_local_extrapolation(self):
+    def use_local_extrapolation(self) -> bool:
         raise NotImplementedError
 
     @staticmethod
@@ -60,7 +60,6 @@ class Integrator(
             dt,
             c_state,
             c_time,
-            intermediate_states,
             intermediate_times,
             *additional_dynamic_args,
         ]
@@ -108,7 +107,9 @@ def finalise_integrator_class(
     integrator_type: typing.Type[Integrator],
     forward_method: signatures.forward_method_signature,
     backward_method: signatures.backward_method_signature,
+    vmap_method,
 ) -> typing.Type[Integrator]:
     integrator_type.forward = staticmethod(forward_method)
     integrator_type.backward = staticmethod(backward_method)
+    integrator_type.vmap = staticmethod(vmap_method)
     return integrator_type
