@@ -1,17 +1,19 @@
 import torch
 import typing
+import numpy
+import warnings
 
 from neuralode import util
 from neuralode.integrators import helpers
 
 
 def integrate_system(
-    fn: typing.Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    c_state: torch.Tensor,
-    c_time: torch.Tensor,
-    final_time: torch.Tensor,
-    dt: torch.Tensor,
-    integrator_kwargs,
+        fn: typing.Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        c_state: torch.Tensor,
+        c_time: torch.Tensor,
+        final_time: torch.Tensor,
+        dt: torch.Tensor,
+        integrator_kwargs,
 ):
     """
     A general integration routine for solving an Initial Value Problem
@@ -62,6 +64,13 @@ def integrate_system(
         min_timestep = smallest_valid_timestep
     else:
         min_timestep = torch.maximum(smallest_valid_timestep, min_timestep)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        min_timestep = helpers.ensure_timestep(min_timestep, c_time, final_time)
+        if max_timestep is not None:
+            max_timestep = helpers.ensure_timestep(max_timestep, c_time, final_time)
+        if (final_time - c_time) < 0.0:
+            min_timestep, max_timestep = max_timestep, min_timestep
 
     i_states = [(c_state.clone(), c_time.clone())]
     error_in_state = [torch.zeros(tuple(), device=c_state.device, dtype=c_state.dtype)]
@@ -78,9 +87,7 @@ def integrate_system(
     # Sometimes a timestep will fail because it is too large
     # we need to track when the integrator gets stuck in a loop due to this
     trial_restarts = 0
-    while torch.any(
-        torch.where(dt > 0.0, (c_time + dt) < final_time, (c_time + dt) > final_time)
-    ):
+    while torch.any(torch.where(dt > 0.0, (c_time + dt) < final_time, (c_time + dt) > final_time)):
         delta_state_lower, delta_state_upper, delta_time = helpers.compute_step(
             fn,
             c_state + truncated_bits_state,
@@ -93,52 +100,74 @@ def integrate_system(
         delta_state = (
             delta_state_upper if use_local_extrapolation else delta_state_lower
         )
-
+        
+        # Sometimes, the estimated delta is not finite because of divergence
+        # either in the implementation of forward_fn or because of accumulated errors.
+        # We raise an error when this happens to let the user know to debug the issue
+        # and to reduce the tolerances on the errors if needed
         non_finite_step = torch.any(~torch.isfinite(delta_state))
-        # Euler estimate of the step, first stage of any RK method is the basic Euler estimate
-        # which we use as a reference to check the stability of the step
-        linear_variation_magnitude = 5.0 * torch.max(torch.abs(intermediate_stages[0]))
-        step_variation_too_large = (
-            torch.max(torch.abs(delta_state)) > linear_variation_magnitude
-        )
-        invalid_step = non_finite_step | step_variation_too_large
-        redo_step = invalid_step
+        raise_error = non_finite_step
 
-        if is_adaptive and not invalid_step:
-            # We use `torch.linalg.norm` to compute the magnitude of the error
-            # we can adjust this by passing in the `ord` keyword to choose a different
-            # vector norm, but the 2-norm suffices for our purposes
-            error_in_state.append((delta_state_upper - delta_state_lower).abs().max())
-            with torch.no_grad():
-                max_error = atol + torch.linalg.norm(rtol * c_state)
-                dt, error_too_large = helpers.adapt_adaptive_timestep(
-                    dt,
-                    error_in_state[-1],
-                    max_error,
-                    integrator_order,
-                    min_timestep=min_timestep,
-                    max_timestep=max_timestep,
+        with torch.no_grad():
+            if is_adaptive:
+                # Euler estimate of the step, first stage of any RK method is the basic Euler estimate
+                # which we use as a reference to check the stability of the step
+                # Similarly, divergence can occur much sooner than a non-finite step, and
+                # to detect this we check that the step does not vary more than 25 times the basic Euler step.
+                # In many cases where the Euler method does not diverge, this is a good test and if it does diverge
+                # it will not give a false positive, but instead a false negative.
+                linear_variation_magnitude = 25.0 * torch.max(torch.abs(intermediate_stages[0])).clamp(min=torch.finfo(c_state.dtype).eps**0.5).detach()
+                step_variation_too_large = (
+                        torch.max(torch.abs(delta_state.detach())) > linear_variation_magnitude
                 )
-                redo_step = redo_step | error_too_large
-        else:
-            error_in_state.append(error_in_state[0])
-        if redo_step and trial_restarts < 8:
-            if invalid_step and trial_restarts <= 32:
-                intermediate_stages.fill_(0.0)
-                dt = torch.copysign(
-                    torch.clamp(torch.abs(dt) / 2, min=min_timestep, max=max_timestep),
-                    dt,
-                )
-            # If the error exceeds our error threshold, we don't commit the step and redo it
-            error_in_state = error_in_state[:-1]
-            trial_restarts += 1
-            continue
-        else:
-            if trial_restarts == 32:
-                raise RuntimeError(
-                    f"Encountered convergence failure at t={c_time} with timestep={dt}"
-                )
-            trial_restarts = 0
+                redo_step = non_finite_step | step_variation_too_large
+                raise_error = redo_step & (trial_restarts > 8)
+
+                # We only need to adapt the timestep if we haven't hit one of the issue conditions above
+                if ~redo_step:
+                    # We use the per-component error to adapt the timestep.
+                    # In this fashion, we can ensure that the error on every component
+                    # is within the tolerances rather than the vector norm.
+                    current_error = (delta_state_upper - delta_state_lower).abs()
+                    max_error = (atol + rtol * torch.maximum(c_state.abs(), (c_state + delta_state).abs()))
+                    dt, error_too_large = helpers.adapt_adaptive_timestep(
+                        dt,
+                        current_error,
+                        max_error,
+                        integrator_order,
+                        min_timestep=min_timestep,
+                        max_timestep=max_timestep,
+                    )
+                    # We redo the step if the error is large and we have not been repeatedly
+                    # attempting a step and failing.
+                    redo_step = error_too_large & (trial_restarts <= 8)
+                    # If the timestep is on the lower or upper bounds, this means that the
+                    # error is due to a user restriction and we silently take the step regardless.
+                    if min_timestep is not None:
+                        redo_step &= (dt.abs() > min_timestep.abs())
+                    if max_timestep is not None:
+                        redo_step &= (dt.abs() < max_timestep.abs())
+                    if ~redo_step:
+                        error_in_state.append(current_error.max())
+                else:
+                    # If the step failed due to a non-finite step or having too large a variation,
+                    # we can reduce the timestep and try again.
+                    dt = torch.clamp(0.25 * dt, min=min_timestep, max=max_timestep)
+                if not raise_error and redo_step:
+                    trial_restarts += 1
+                    continue
+                trial_restarts = 0
+        if raise_error:
+            err = RuntimeError(
+                f"Encountered convergence failure at t={c_time} with timestep={dt}"
+            )
+            err.add_note(
+                f"""with the following state:
+current time: {c_time}/timestep: {dt}
+current state: {numpy.array2string(c_state.cpu().numpy(), separator=', ', precision=16)}
+delta state: {numpy.array2string(delta_state.cpu().numpy(), separator=', ', precision=16)}
+""")
+            raise err
 
         c_state, truncated_bits_state = util.partial_compensated_sum(
             delta_state, (c_state, truncated_bits_state)

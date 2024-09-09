@@ -31,7 +31,7 @@ def get_forward_method(
         t1: torch.Tensor,
         dt: torch.Tensor,
         integrator_kwargs: dict[str, torch.Tensor],
-        *additional_dynamic_args,
+        *additional_dynamic_args: list[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         A general integration routine for solving an Initial Value Problem
@@ -129,7 +129,6 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
             dt,
             c_state,
             c_time,
-            intermediate_states,
             intermediate_times,
             *additional_dynamic_args,
         ) = ctx.saved_tensors
@@ -180,42 +179,105 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
                     if torch.all(d_inter_state == 0.0):
                         # No need to integrate up to the boundary if the incoming gradients are zero
                         continue
-                    current_adj_state, current_adj_time, _, _, _ = integrator_type.apply(adjoint_fn,
-                                                                                         current_adj_state,
-                                                                                         current_adj_time,
-                                                                                         next_adj_time, -dt,
-                                                                                         integrator_kwargs,
-                                                                                         *additional_dynamic_args)
-                    current_adj_state = torch.scatter(current_adj_state, 0, adj_indices, d_inter_state.ravel())
+                    current_adj_state, current_adj_time, _, _, _ = (
+                        integrator_type.apply(
+                            adjoint_fn,
+                            current_adj_state,
+                            current_adj_time,
+                            next_adj_time,
+                            -dt,
+                            integrator_kwargs,
+                            *additional_dynamic_args,
+                        )
+                    )
+                    current_adj_state = torch.scatter(
+                        current_adj_state, 0, adj_indices, d_inter_state.ravel()
+                    )
 
-            final_adj_state, final_adj_time, _, _, _ = integrator_type.apply(adjoint_fn, current_adj_state,
-                                                                             current_adj_time, t0, -dt, integrator_kwargs,
-                                                                             *additional_dynamic_args)
+            final_adj_state, final_adj_time, _, _, _ = integrator_type.apply(
+                adjoint_fn,
+                current_adj_state,
+                current_adj_time,
+                t0,
+                -dt,
+                integrator_kwargs,
+                *additional_dynamic_args,
+            )
 
             # This should be equivalent to the initial state we passed in, but it will
             # be appropriately attached to the autograd graph for higher order derivatives
-            adj_initial_state = final_adj_state[:c_state.numel()].reshape(c_state.shape)
-            adj_variables = final_adj_state[c_state.numel():2*c_state.numel()].reshape(c_state.shape)
-            adj_parameter_gradients = final_adj_state[2*c_state.numel():]
+            if torch.is_grad_enabled() and any(
+                i.requires_grad for i in [d_c_state, d_c_time, d_intermediate_states]
+            ):
+                adj_initial_state = final_adj_state[: c_state.numel()].reshape(
+                    c_state.shape
+                )
+            else:
+                adj_initial_state = x0.clone()
+            adj_variables = final_adj_state[c_state.numel() : 2 * c_state.numel()]
+            adj_parameter_gradients = final_adj_state[2 * c_state.numel() :]
 
             # The gradients of the incoming state are equal to the gradients from the first element of the
             # intermediate state plus the lagrange variables
-            input_grads[1] = adj_variables.reshape(c_state.shape) + d_intermediate_states[0].ravel().reshape(c_state.shape)
+            initial_state_grads_from_adj = adj_variables.reshape(c_state.shape)
+            initial_state_grads_from_intermediate = d_intermediate_states[0]
+
+            input_grads[1] = (
+                initial_state_grads_from_adj + initial_state_grads_from_intermediate
+            )
 
             # The gradient of the initial time is equal to the gradient from the first element of the intermediate times
             # minus the product of the lagrange variables and the derivative of the system at the initial time
-            input_grads[2] = (d_intermediate_times[0].ravel() - torch.sum(adj_variables.ravel()*forward_fn(adj_initial_state, final_adj_time, *additional_dynamic_args).ravel())).reshape(c_time.shape)
+            derivative_at_t0 = forward_fn(
+                adj_initial_state, final_adj_time, *additional_dynamic_args
+            )
+            initial_time_grads_from_ode = torch.sum(
+                adj_variables * derivative_at_t0.ravel()
+            )
+            initial_time_grads_from_intermediate = d_intermediate_times[0].ravel()
+
+            input_grads[2] = (
+                initial_time_grads_from_intermediate - initial_time_grads_from_ode
+            )
             # The gradient of the final time is equal to the gradient from the gradient in the final state
             # plus the product of the lagrange variables and the derivative of the system at the final time
-            input_grads[3] = ((d_c_time + d_intermediate_times[-1]) + torch.sum((d_c_state + d_intermediate_states[-1]).ravel()*forward_fn(c_state, c_time, *additional_dynamic_args).ravel())).reshape(t0.shape)
+            derivative_at_t1 = forward_fn(c_state, c_time, *additional_dynamic_args)
+            final_time_grads_from_ode = torch.sum(
+                (d_c_state + d_intermediate_states[-1]) * derivative_at_t1
+            )
+            final_time_grads_from_intermediate = d_c_time + d_intermediate_times[-1]
+
+            input_grads[3] = (
+                final_time_grads_from_intermediate + final_time_grads_from_ode
+            )
 
             parameter_gradients = []
 
-            for p_shape, num_elem in zip(parameter_shapes, map(math.prod, parameter_shapes)):
-                parameter_gradients.append(adj_parameter_gradients[:num_elem].reshape(p_shape))
+            for p_shape, num_elem in zip(
+                parameter_shapes, map(math.prod, parameter_shapes)
+            ):
+                parameter_gradients.append(
+                    adj_parameter_gradients[:num_elem].reshape(p_shape)
+                )
                 adj_parameter_gradients = adj_parameter_gradients[num_elem:]
 
             input_grads[6:] = parameter_gradients
+            inputs_grad_not_finite = list(
+                map(
+                    lambda x: False if x is None else (~x.isfinite()).any(), input_grads
+                )
+            )
+            if any(inputs_grad_not_finite):
+                inp_nonfinite_indices = [
+                    inp_idx
+                    for inp_idx, inp_grad_is_not_finite in enumerate(
+                        inputs_grad_not_finite
+                    )
+                    if inp_grad_is_not_finite
+                ]
+                raise ValueError(
+                    f"Encountered non-finite grads for inputs: {inp_nonfinite_indices}"
+                )
         return tuple(input_grads)
 
     return __internal_backward
@@ -330,7 +392,7 @@ MidpointIntegrator = get_integrator(torch.tensor([
     [0.0, 0.0, 0.0],
     [0.5, 0.5, 0.0],
     [torch.inf, 0.0, 1.0]
-], dtype=torch.float64), integrator_order=2, integrator_name = "MidpointIntegrator")
+], dtype=torch.float64), integrator_order=2, integrator_name="MidpointIntegrator")
 
 
 RK4Integrator = get_integrator(
@@ -349,8 +411,7 @@ RK4Integrator = get_integrator(
         ],
         dtype=torch.float64,
     ),
-    integrator_order=4,
-    integrator_name="RK4Integrator",
+    integrator_order=4, integrator_name="RK4Integrator",
 )
 
 AdaptiveRK45Integrator = get_integrator(torch.tensor([
@@ -363,7 +424,7 @@ AdaptiveRK45Integrator = get_integrator(torch.tensor([
     [1.0,       35/384,      0.0,        500/1113,    125/192, -2187/6784,    11/84,    0.0 ],
     [torch.inf, 35/384,      0.0,        500/1113,    125/192, -2187/6784,    11/84,    0.0 ],
     [torch.inf, 5179/57600,  0.0,        7571/16695,  393/640, -92097/339200, 187/2100, 1/40]
-], dtype=torch.float64), integrator_order = 5, integrator_name = "AdaptiveRK45Integrator")
+], dtype=torch.float64), integrator_order=5, integrator_name="AdaptiveRK45Integrator")
 
 
 AdaptiveRK87Integrator = get_integrator(torch.tensor([
@@ -383,6 +444,3 @@ AdaptiveRK87Integrator = get_integrator(torch.tensor([
     [torch.inf, 13451932/455176623, 0.0, 0.0, 0.0, 0.0, -808719846/976000145, 1757004468/5645159321, 656045339/265891186, -3867574721/1518517206, 465885868/322736535,  53011238/667516719,   2/45,                 0.0],
     [torch.inf, 14005451/335480064, 0.0, 0.0, 0.0, 0.0, -59238493/1068277825, 181606767/758867731,   561292985/797845732, -1041891430/1371343529, 760417239/1151165299, 118820643/751138087, -528747749/2220607170, 1/4]
 ], dtype=torch.float64), integrator_order=8, integrator_name="AdaptiveRK87Integrator")
-
-
-
