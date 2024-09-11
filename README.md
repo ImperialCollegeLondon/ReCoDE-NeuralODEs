@@ -15,27 +15,13 @@ Neural Networks to demonstrate how to effectively learn dynamics from data.
 - How neural networks work
 - How neural networks and numerical integration can be combined
 
-## ---- Fill in this part later: ----
-<!-- How long should they spend reading and practising using your Code.
-Provide your best estimate -->
-
-| Task       | Time    |
-| ---------- |---------|
-| Reading    | 4 hours |
-| Practising | 8 hours |
-
-## --------
+| Task                         | Time       |
+|------------------------------|------------|
+| Reading                      | 8 hours    |
+| Running Notebooks            | 4-12 hours |
+| Practising with Own Dynamics | 4+ hours   |
 
 ## Requirements
-
-<!--
-If your exemplar requires students to have a background knowledge of something
-especially this is the place to mention that.
-
-List any resources you would recommend to get the students started.
-
-If there is an existing exemplar in the ReCoDE repositories link to that.
--->
 
 ### Academic
 
@@ -44,44 +30,11 @@ If there is an existing exemplar in the ReCoDE repositories link to that.
 - Basic python programming skills, knowledge of iteration, branching, etc.
 - A bref understanding of vectorised computation. How CPUs/GPUs process different data in parallel
 
-<!-- List the system requirements and how to obtain them, that can be as simple
-as adding a hyperlink to as detailed as writting step-by-step instructions.
-How detailed the instructions should be will vary on a case-by-case basis.
-
-Here are some examples:
-
-- 50 GB of disk space to hold Dataset X
-- Anaconda
-- Python 3.11 or newer
-- Access to the HPC
-- PETSc v3.16
-- gfortran compiler
-- Paraview
--->
-
 ### System
 
 - Python 3.10 or newer
 - Poetry
 - CUDA-capable GPU (for GPU training of networks)
-
-<!-- Instructions on how the student should start going through the exemplar.
-
-Structure this section as you see fit but try to be clear, concise and accurate
-when writing your instructions.
-
-For example:
-Start by watching the introduction video,
-then study Jupyter notebooks 1-3 in the `intro` folder
-and attempt to complete exercise 1a and 1b.
-
-Once done, start going through through the PDF in the `main` folder.
-By the end of it you should be able to solve exercises 2 to 4.
-
-A final exercise can be found in the `final` folder.
-
-Solutions to the above can be found in `solutions`.
--->
 
 ## Getting Started
 
@@ -104,32 +57,25 @@ Solutions to the above can be found in `solutions`.
 3. Study Chapter 2 for a walk-through of the module structure
 4. Study jupyter notebooks for training scripts as well as visualisation of results
 
-<!-- An overview of the files and folder in the exemplar.
-Not all files and directories need to be listed, just the important
-sections of your project, like the learning material, the code, the tests, etc.
-
-A good starting point is using the command `tree` in a terminal(Unix),
-copying its output and then removing the unimportant parts.
-
-You can use ellipsis (...) to suggest that there are more files or folders
-in a tree node.
-
--->
-
 ## Project Structure
 
 ```log
 .
 ├── neuralode
-│   ├── SUBMODULE 1
-│   └── SUBMODULE 2
+│   ├── integrators
+│   ├── models
+│   ├── plot
+│   └── ...
 ├── notebooks
-|   ├── FILL WITH NOTEBOOK NAMES
+|   ├── 01-simple-integration-routines.ipynb
+|   ├── 02-arbitrary-adaptive-tableaus.ipynb
+|   ├── 03-the-adjoint-method.ipynb
+|   ├── 04-driven-harmonic-oscillator.ipynb
+|   └── 05-the-inverted-pendulum.ipynb
 ├── docs
-├── main
+|   └── 01-introduction.md
+|   ...
 ```
-
-<!-- Change this to your License. Make sure you have added the file on GitHub -->
 
 ## License
 
