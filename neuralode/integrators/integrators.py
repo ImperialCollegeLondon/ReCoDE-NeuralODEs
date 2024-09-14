@@ -281,7 +281,6 @@ def get_backward_method(integrator_type) -> signatures.backward_method_signature
                     f"Encountered non-finite grads for inputs: {inp_nonfinite_indices}"
                 )
         return tuple(input_grads)
-
     return __internal_backward
 
 
