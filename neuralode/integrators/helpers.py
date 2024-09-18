@@ -126,41 +126,32 @@ def compute_step(
 
 
 def construct_adjoint_fn(
-    forward_fn: signatures.integration_fn_signature,
-    state_shape: tuple[int] | torch.Size,
+        forward_fn: signatures.integration_fn_signature,
+        state_shape: tuple[int] | torch.Size,
+        gradient_clipping: torch.Tensor | None = None
 ) -> signatures.integration_fn_signature:
     state_size = math.prod(state_shape)
 
     def adjoint_fn(
-        packed_state: torch.Tensor,
-        adj_time: torch.Tensor,
-        *dynamic_args: tuple[torch.Tensor],
+            packed_state: torch.Tensor,
+            adj_time: torch.Tensor,
+            *dynamic_args: tuple[torch.Tensor],
     ) -> torch.Tensor:
         # Unpack the state variables
-        needs_autodiff = packed_state.requires_grad
-        with torch.set_grad_enabled(True):
-            packed_state.requires_grad_(True)
-            y = packed_state[:state_size]
-            adj_lagrange = packed_state[state_size : 2 * state_size]
-            dy = forward_fn(y.reshape(state_shape), adj_time, *dynamic_args).ravel()
+        y = packed_state[:state_size].reshape(state_shape)
+        adj_lagrange = packed_state[state_size:2 * state_size].reshape(state_shape)
 
         # We want the product of the jacobian of dy/dt wrt. each of the parameters multiplied by the adjoint variables
         # This is the Jacobian-vector product which can be directly computed through PyTorch autograd
         # using the `torch.autograd.grad` function and passing the adjoint variables as the incoming gradients
-        final_grads = util.masked_grad(
-            dy,
-            [packed_state] + list(dynamic_args),
-            adj_lagrange,
-            create_graph=needs_autodiff,
-            materialize_grads=True,
-            allow_unused=True,
-        )
-        adj_lagrange_derivatives = final_grads[0][:state_size]
-        parameter_derivatives_of_fn = final_grads[1:]
+        dy, final_grads = torch.autograd.functional.vjp(forward_fn, (y, adj_time, *dynamic_args), adj_lagrange,
+                                                        create_graph=packed_state.requires_grad)
+        adj_lagrange_derivatives = final_grads[0].ravel()[:state_size]
+        parameter_derivatives_of_fn = final_grads[2:]
 
         d_adj = torch.cat(
             [
-                dy,
+                dy.ravel(),
                 -adj_lagrange_derivatives,
             ],
             dim=0,
@@ -169,6 +160,14 @@ def construct_adjoint_fn(
             parameter_derivatives_of_fn = torch.cat(
                 [i.ravel() for i in parameter_derivatives_of_fn]
             )
+            if gradient_clipping is not None:
+                parameter_derivatives_of_fn = torch.where(
+                    torch.isfinite(parameter_derivatives_of_fn),
+                    parameter_derivatives_of_fn,
+                    0.0
+                )
+                parameter_derivatives_of_fn = parameter_derivatives_of_fn.clamp(min=-gradient_clipping.abs(),
+                                                                                max=gradient_clipping.abs())
             d_adj = torch.cat([d_adj, -parameter_derivatives_of_fn])
         return d_adj
 
